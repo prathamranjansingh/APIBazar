@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  password    String
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  apiKeys     ApiKey[]
+  purchasedAPIs PurchasedAPI[]
+  listedAPIs  Api[]
+  transactions Transaction[]
+  reviews     Review[]
+}
+
+model Api {
+  id            String   @id @default(uuid())
+  name          String
+  description   String
+  category      String
+  documentation String
+  pricingModel  PricingModel
+  baseUrl       String
+  sellerId      String
+  seller        User     @relation(fields: [sellerId], references: [id])
+  endpoints     Endpoint[]
+  analytics     ApiAnalytics?
+  transactions  Transaction[]
+  reviews       Review[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Endpoint {
+  id             String    @id @default(uuid())
+  apiId          String
+  api            Api       @relation(fields: [apiId], references: [id])
+  name           String    // Endpoint name (e.g., "Get Weather Data")
+  description    String    // Description of what this endpoint does
+  url            String    // Endpoint path (e.g., "/weather/today")
+  method         HttpMethod
+  headers        Json      // Headers (e.g. { "Authorization": "Bearer TOKEN" })
+  queryParams    Json      // Query params (e.g. { "city": "string" })
+  requestBody    Json      // Request body schema
+  responseExample Json     // Example successful response
+  errorResponses Json      // Example error responses
+  isPublic       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model ApiKey {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  key       String  @unique
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Transaction {
+  id         String   @id @default(uuid())
+  userId     String
+  apiId      String
+  amount     Float
+  createdAt  DateTime @default(now())
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  apiId     String
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+}
+
+enum PricingModel {
+  PAY_PER_CALL
+  SUBSCRIPTION
+  FREE
+}
+
+enum HttpMethod {
+  GET
+  POST
+  PUT
+  DELETE
+}
