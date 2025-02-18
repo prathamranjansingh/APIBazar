@@ -23,6 +23,12 @@
 - **types/**: TypeScript interfaces
 - **prisma/**: Prisma schema & migrations
 
+### 📦 Important Packages
+- **helmet**: Enhances security by setting various HTTP headers.
+- **compression**: Compresses response bodies to improve performance.
+- **morgan**: HTTP request logger for debugging and monitoring API calls.
+- **cookie-parser**: Parses cookies from incoming requests.
+
 ### 🚀 Getting Started
 1. **Clone the repository**:
     ```bash
