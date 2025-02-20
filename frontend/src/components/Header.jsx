@@ -15,7 +15,6 @@ export function SiteHeader() {
           <span className="font-bold text-xl">API Platform</span>
         </Link>
 
-        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6">
           <div className="group relative">
             <button className="flex items-center gap-1 text-sm font-medium hover:text-primary">

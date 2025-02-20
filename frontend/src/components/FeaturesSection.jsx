@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 
 export function FeaturesSection() {
   return (
-    <section className="container px-4 md:px-6 py-12 md:py-24 lg:py-32 overflow-hidden">
+    <section className="container px-4 md:px-6 py-12 md:py-24 lg:py-22 overflow-hidden">
       <motion.div
         className="space-y-4 text-center mb-16"
         initial={{ opacity: 0, y: 20 }}
@@ -48,29 +48,34 @@ export function FeaturesSection() {
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="item-1" className="border-none">
               <AccordionTrigger className="hover:no-underline hover:bg-muted px-4 rounded-lg text-lg font-semibold">
-                Execute, test, and interact with APIs in seconds
+              Discover and Explore a Vast Library of APIs
               </AccordionTrigger>
               <AccordionContent className="px-4 text-muted-foreground">
-                Get started quickly with our intuitive interface for testing and debugging APIs. Send requests, examine
-                responses, and collaborate with your team in real-time.
+              Find high-quality APIs across multiple industries, from finance to machine learning. Easily search, filter, and integrate the right API for your needs.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-2" className="border-none">
               <AccordionTrigger className="hover:no-underline hover:bg-muted px-4 rounded-lg text-lg font-semibold">
-                Reduce duplication of work for your teams
+              Test, Debug, and Optimize APIs with Ease
               </AccordionTrigger>
               <AccordionContent className="px-4 text-muted-foreground">
-                Share collections, environments, and test suites across your organization. Maintain a single source of
-                truth for your API development workflow.
+              Execute API requests in real-time, analyze responses, and debug issues instantly. Our built-in testing tools help you streamline development and ensure API reliability.
               </AccordionContent>
             </AccordionItem>
             <AccordionItem value="item-3" className="border-none">
               <AccordionTrigger className="hover:no-underline hover:bg-muted px-4 rounded-lg text-lg font-semibold">
-                Faster time to first API call
+              Monetize Your APIs and Reach a Global Audience
               </AccordionTrigger>
               <AccordionContent className="px-4 text-muted-foreground">
-                Start making API calls immediately with our user-friendly interface. No complex setup required - just
-                enter your endpoint and start exploring.
+              List your APIs on API Bazar and generate revenue effortlessly. With built-in analytics and payment integrations, you can track usage, manage subscriptions, and maximize earnings.
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="item-4" className="border-none">
+              <AccordionTrigger className="hover:no-underline hover:bg-muted px-4 rounded-lg text-lg font-semibold">
+              Collaborate, Build, and Deploy Faster
+              </AccordionTrigger>
+              <AccordionContent className="px-4 text-muted-foreground">
+              Work with your team in a shared API workspace, improving efficiency and reducing development time. Leverage automation tools to accelerate API lifecycle management.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
