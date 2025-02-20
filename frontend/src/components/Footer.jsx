@@ -48,7 +48,7 @@ export function SiteFooter() {
           <div className="space-y-4">
             <Link to="/" className="flex items-center space-x-2">
               <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600" />
-              <span className="font-bold text-xl">API Platform</span>
+              <span className="font-bold text-xl">APIBazar</span>
             </Link>
             <p className="text-muted-foreground max-w-[400px]">
               The most powerful platform for building and testing APIs. Join millions of developers worldwide.
@@ -80,7 +80,7 @@ export function SiteFooter() {
         <div className="mt-12 pt-8 border-t">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} API Platform. All rights reserved.
+              © {new Date().getFullYear()} APIBazar. All rights reserved.
             </p>
             <div className="flex gap-4">
               <Link to="#" className="text-sm text-muted-foreground hover:text-foreground">

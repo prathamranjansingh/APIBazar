@@ -12,7 +12,7 @@ export function SiteHeader() {
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center space-x-2">
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600" />
-          <span className="font-bold text-xl">API Platform</span>
+          <span className="font-bold text-xl">APIBazar</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
