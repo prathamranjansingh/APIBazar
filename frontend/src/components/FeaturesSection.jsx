@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 
 export function FeaturesSection() {
   return (
-    <section className="container px-4 md:px-6 py-12 md:py-24 lg:py-22 overflow-hidden">
+    <section className="container px-8 md:px-28 py-12 md:py-24 lg:py-22 overflow-hidden">
       <motion.div
         className="space-y-4 text-center mb-16"
         initial={{ opacity: 0, y: 20 }}
@@ -81,6 +81,8 @@ export function FeaturesSection() {
           </Accordion>
         </motion.div>
       </div>
+      
+      
     </section>
   );
 }

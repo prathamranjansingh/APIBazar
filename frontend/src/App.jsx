@@ -5,7 +5,7 @@ import { SiteFooter } from "./components/Footer";
 
 function App() {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-10">
+    <div className="relative flex min-h-screen flex-col items-center justify-center ">
       <SiteHeader />
         <Routes>
           <Route path="/" element={<Home />} />
