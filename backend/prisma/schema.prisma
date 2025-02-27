@@ -7,38 +7,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ✅ User Model (Auth0-based Authentication)
 model User {
-  id         String   @id @default(uuid())  // Internal ID
-  auth0Id    String   @unique               // Auth0 ID
-  email      String   @unique
-  name       String?
-  picture    String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  // Relations
-  profile       Profile?
-  apiKeys       ApiKey[]
-  purchasedAPIs PurchasedAPI[]
-  listedAPIs    Api[]
-  transactions  Transaction[]
-  reviews       Review[]
+  id                    String          @id @default(uuid())
+  auth0Id               String          @unique
+  email                 String          @unique
+  name                  String?
+  picture               String?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  profile               Profile?
+  apiKeys               ApiKey[]
+  purchasedAPIs         PurchasedAPI[]
+  listedAPIs            Api[]
+  transactionsAsBuyer   Transaction[] @relation("buyerTransaction")
+  transactionsAsSeller  Transaction[] @relation("sellerTransaction")
+  reviews               Review[]
 }
 
-// ✅ Profile Model (Additional User Info)
 model Profile {
-  id         String   @id @default(uuid())
-  bio        String?
-  userId     String   @unique
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String  @id @default(uuid())
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id])
+  bio       String?
+  location  String?
+  website   String?
 }
 
-// ✅ API Model (APIs Listed on Marketplace)
 model Api {
-  id            String    @id @default(uuid())
+  id            String          @id @default(uuid())
   name          String
   description   String
   category      String
@@ -46,51 +42,62 @@ model Api {
   pricingModel  PricingModel
   baseUrl       String
   ownerId       String
-  owner         User      @relation(fields: [ownerId], references: [id])
+  owner         User            @relation(fields: [ownerId], references: [id])
   endpoints     Endpoint[]
   analytics     ApiAnalytics?
   transactions  Transaction[]
   reviews       Review[]
+  purchasedBy   PurchasedAPI[]
+  apiKeys       ApiKey[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  @@index([ownerId])
 }
 
-// ✅ Endpoint Model (API Endpoints)
+enum PricingModel {
+  FREE
+  PAID
+  SUBSCRIPTION
+}
+
 model Endpoint {
-  id             String   @id @default(uuid())
-  apiId          String
-  api            Api      @relation(fields: [apiId], references: [id])
-  name           String
-  description    String
-  url            String
-  method         HttpMethod
-  headers        Json
-  queryParams    Json
-  requestBody    Json
-  responseExample Json
-  errorResponses Json
-  isPublic       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          String @id @default(uuid())
+  apiId       String
+  api         Api    @relation(fields: [apiId], references: [id])
+  method      String
+  path        String
+  description String
 }
 
-// ✅ API Key Model (For API Buyers)
+model ApiAnalytics {
+  id               String   @id @default(uuid())
+  apiId            String   @unique
+  api              Api      @relation(fields: [apiId], references: [id])
+  totalCalls       Int      @default(0)
+  errorRate        Float    @default(0.0)
+  responseTimeAvg  Float    @default(0.0)
+  updatedAt        DateTime @updatedAt
+  @@index([apiId])
+}
+
 model ApiKey {
-  id        String  @id @default(uuid())
-  userId    String
-  user      User    @relation(fields: [userId], references: [id])
+  id        String @id @default(uuid())
   apiId     String
-  api       Api     @relation(fields: [apiId], references: [id])
-  key       String  @unique
-  isActive  Boolean @default(true)
+  api       Api    @relation(fields: [apiId], references: [id])
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  key       String @unique
   createdAt DateTime @default(now())
-
-  @@index([userId, apiId])
 }
 
-// ✅ Transactions (Purchases of APIs)
+model PurchasedAPI {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+  apiId     String
+  api       Api    @relation(fields: [apiId], references: [id])
+  createdAt DateTime @default(now())
+}
+
 model Transaction {
   id        String   @id @default(uuid())
   buyerId   String
@@ -98,54 +105,19 @@ model Transaction {
   apiId     String
   amount    BigInt
   createdAt DateTime @default(now())
-
-  // Relations
-  buyer     User     @relation(fields: [buyerId], references: [id])
-  seller    User     @relation(fields: [sellerId], references: [id])
-  api       Api      @relation(fields: [apiId], references: [id])
-
+  buyer     User @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
+  seller    User @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
+  api       Api  @relation(fields: [apiId], references: [id])
   @@index([buyerId, apiId])
 }
 
-// ✅ Reviews (Users Reviewing APIs)
 model Review {
   id        String   @id @default(uuid())
   userId    String
-  apiId     String
-  rating    Int
-  comment   String
-  createdAt DateTime @default(now())
-
-  // Relations
   user      User     @relation(fields: [userId], references: [id])
+  apiId     String
   api       Api      @relation(fields: [apiId], references: [id])
-
-  @@index([apiId])
-}
-
-// ✅ API Usage Analytics
-model ApiAnalytics {
-  id         String   @id @default(uuid())
-  apiId      String
-  api        Api      @relation(fields: [apiId], references: [id])
-  totalCalls Int      @default(0)
-  errorRate  Float    @default(0.0)
-  responseTimeAvg Float @default(0.0)
-  updatedAt  DateTime @updatedAt
-
-  @@index([apiId])
-}
-
-// ✅ ENUMs
-enum PricingModel {
-  PAY_PER_CALL
-  SUBSCRIPTION
-  FREE
-}
-
-enum HttpMethod {
-  GET
-  POST
-  PUT
-  DELETE
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
 }
