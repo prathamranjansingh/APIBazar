@@ -7,7 +7,7 @@ import { HeroSection } from "../components/HeroSection";
 
 export default function Home() {
   return (
-      <main className="flex-1 lg:text-left text-center">
+      <main className="flex flex-col lg:text-left items-center justify-center text-center">
         <HeroSection />
         <FeaturesSection />
         <FinalQuote/>

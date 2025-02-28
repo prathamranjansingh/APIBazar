@@ -3,7 +3,7 @@ import HeaderImg from "D:/Projects/APIBazaar/frontend/src/assets/HeaderImg.png";
 
 export function HeroSection() {
     return (
-        <section className="container  px-6 py-12 md:py-24 lg:py-22">
+        <section className="container px-6 py-12 md:py-24 lg:py-22">
             <div className="grid lg:grid-cols-2 gap-10 lg:gap-12 items-center">
                 
                 {/* Image comes first on mobile */}

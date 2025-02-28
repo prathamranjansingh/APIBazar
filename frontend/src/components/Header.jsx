@@ -25,26 +25,31 @@ const authenticateUser = async (user) => {
   }
 };
 
-// Dropdown component
+
 const Dropdown = ({ title, links }) => (
-  <div className="group relative">
-    <button className="flex items-center gap-1 text-sm font-medium hover:text-primary">
+  <div className="relative group">
+    <button className="flex items-center gap-1 text-sm font-medium hover:text-primary z-10 relative">
       {title}
       <ChevronDown className="h-4 w-4 transition-transform group-hover:rotate-180" />
     </button>
-    <div className="absolute top-full left-0 hidden pt-2 group-hover:block">
-      <div className="w-48 rounded-md border bg-background p-2 shadow-lg">
-        {links.map(({ name, to }) => (
-          <Link key={name} to={to} className="block px-3 py-2 text-sm rounded-md hover:bg-muted">
-            {name}
-          </Link>
-        ))}
-      </div>
+
+    <div className="absolute top-full left-0 mt-2 w-48 rounded-md border bg-white shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible group-hover:translate-y-0 transition-all duration-200 ease-in-out z-50">
+      {links.map(({ name, to }) => (
+        <Link
+          key={name}
+          to={to}
+          className="block px-3 py-2 text-sm rounded-md hover:bg-gray-100"
+        >
+          {name}
+        </Link>
+      ))}
     </div>
   </div>
 );
 
-// Authentication Buttons
+
+
+
 const AuthButtons = ({ isAuthenticated, user, login, logout }) => (
   <div className="hidden md:flex items-center gap-2">
     {isAuthenticated ? (
@@ -66,17 +71,15 @@ const AuthButtons = ({ isAuthenticated, user, login, logout }) => (
   </div>
 );
 
-// Site Header Component
+
 export function SiteHeader() {
   const { loginWithRedirect, logout, user, isAuthenticated, isLoading } = useAuth0();
   const [isOpen, setIsOpen] = useState(false);
   const [backendUser, setBackendUser] = useState(null);
 
-  // Memoized Authentication Methods
   const handleLogin = useCallback(() => loginWithRedirect(), [loginWithRedirect]);
   const handleLogout = useCallback(() => logout({ returnTo: window.location.origin }), [logout]);
 
-  // Sync user with backend on login
   useEffect(() => {
     if (isAuthenticated && user) {
       authenticateUser(user).then((data) => {
@@ -101,6 +104,7 @@ export function SiteHeader() {
         <nav className="hidden md:flex items-center gap-6">
           <Dropdown
             title="Product"
+            className="z-1"
             links={[
               { name: "Features", to: "#" },
               { name: "Integrations", to: "#" },
@@ -120,10 +124,8 @@ export function SiteHeader() {
           <Link to="/api-network" className="text-sm font-medium hover:text-primary">API Network</Link>
         </nav>
 
-        {/* Authentication Buttons */}
         {!isLoading && <AuthButtons {...authState} login={handleLogin} logout={handleLogout} />}
 
-        {/* Mobile Menu */}
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild className="md:hidden">
             <Button variant="ghost" size="icon">
@@ -136,7 +138,6 @@ export function SiteHeader() {
               <SheetTitle>Menu</SheetTitle>
             </SheetHeader>
             <div className="grid gap-4 py-4">
-              {/* Mobile Menu Links */}
               <Dropdown
                 title="Product"
                 links={[
