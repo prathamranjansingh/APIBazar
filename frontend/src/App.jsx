@@ -5,12 +5,13 @@ import { SiteFooter } from "./components/Footer";
 
 function App() {
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center ">
+    <div className="relative flex min-h-screen flex-col">
       <SiteHeader />
+      <main className="flex-grow">
         <Routes>
           <Route path="/" element={<Home />} />
         </Routes>
-  
+      </main>
       <SiteFooter />
     </div>
   );
