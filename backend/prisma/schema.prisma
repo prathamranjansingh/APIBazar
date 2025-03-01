@@ -38,7 +38,7 @@ model Api {
   name          String
   description   String
   category      String
-  documentation String
+  documentation String          // Can be used for Markdown or Notion-like storage
   pricingModel  PricingModel
   baseUrl       String
   ownerId       String
@@ -63,9 +63,12 @@ model Endpoint {
   id          String @id @default(uuid())
   apiId       String
   api         Api    @relation(fields: [apiId], references: [id])
-  method      String
-  path        String
-  description String
+  method      String // GET, POST, PUT, DELETE, etc.
+  path        String // "/users", "/posts/:id"
+  description String?
+  headers     Json?
+  requestBody Json?
+  response    Json? 
 }
 
 model ApiAnalytics {
@@ -86,6 +89,8 @@ model ApiKey {
   userId    String
   user      User   @relation(fields: [userId], references: [id])
   key       String @unique
+  rateLimit Int    @default(1000) // Max requests per month
+  expiresAt DateTime? // Optional expiration
   createdAt DateTime @default(now())
 }
 
