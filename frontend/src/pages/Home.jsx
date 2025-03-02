@@ -8,9 +8,11 @@ import { HeroSection } from "../components/HeroSection";
 export default function Home() {
   return (
       <main className="flex flex-col lg:text-left items-center justify-center text-center">
+        <SiteHeader />
         <HeroSection />
         <FeaturesSection />
         <FinalQuote/>
+        <SiteFooter />
       </main>
   )
 }

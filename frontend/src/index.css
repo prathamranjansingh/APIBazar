@@ -32,6 +32,14 @@
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
     font-family: "Inter", serif;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -58,7 +66,15 @@
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%
-  }
+  ;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%}
 }
 @layer base {
   * {
@@ -66,5 +82,34 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+
+.simple-spinner {
+  width: 30px;
+  height: 30px;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.simple-spinner span {
+  display: block;
+  width: 30px;
+  height: 30px;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  border-right-color: rgba(255, 255, 255, 0.7);
+  animation: spinner-anim 0.8s linear infinite;
+}
+
+@keyframes spinner-anim {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
