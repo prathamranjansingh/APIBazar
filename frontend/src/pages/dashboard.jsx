@@ -1,3 +1,5 @@
+"use client"
+
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useApi } from "../contexts/api-context"
@@ -44,7 +46,7 @@ function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full h-full">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Welcome back, {user?.name}</h2>
         <Button onClick={() => navigate("/apis/create")}>
@@ -52,7 +54,7 @@ function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 w-full">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total APIs</CardTitle>
@@ -106,15 +108,15 @@ function Dashboard() {
         </Card>
       </div>
 
-      <Tabs defaultValue="apis" className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="apis" className="space-y-4 w-full">
+        <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="apis">My APIs</TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
           <TabsTrigger value="purchased">Purchased APIs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="apis" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {apis.length > 0 ? (
               apis.map((api) => (
                 <Card key={api.id} className="overflow-hidden">
@@ -229,7 +231,7 @@ function Dashboard() {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       <div className="flex items-center justify-between">
         <Skeleton className="h-10 w-[250px]" />
         <Skeleton className="h-10 w-[150px]" />
@@ -252,10 +254,10 @@ function DashboardSkeleton() {
           ))}
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-4 w-full">
         <Skeleton className="h-10 w-[300px]" />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array(3)
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array(4)
             .fill(0)
             .map((_, i) => (
               <Card key={i}>
