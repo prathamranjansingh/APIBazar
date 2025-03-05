@@ -120,7 +120,7 @@ function Layout() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-background w-full overflow-hidden">
+      <div className="flex min-h-screen bg-background w-full">
         <Sidebar className="border-r">
           <SidebarHeader className="px-3 py-2">
             <div className="flex items-center gap-2 px-2 py-3">
@@ -261,21 +261,11 @@ function Layout() {
           <header className="border-b py-3 px-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
             <div className="flex items-center gap-3">
               <SidebarTrigger className="md:hidden" />
-              <h1 className="text-xl font-semibold truncate">
+              <h1 className="text-xl font-bold font-bricolage truncate">
                 {mainMenuItems.find((item) => isPathActive(item.path))?.name || "Dashboard"}
               </h1>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-1 hidden sm:flex">
-                <Zap className="h-4 w-4" />
-                <span>Upgrade</span>
-              </Button>
-              {location.pathname.includes("/lay/apis") && (
-                <Button size="sm" className="gap-1" onClick={() => navigate("/lay/apis/create")}>
-                  <PlusCircle className="h-4 w-4" />
-                  <span className="hidden sm:inline">Create API</span>
-                </Button>
-              )}
               <Avatar className="h-8 w-8 border hidden sm:flex">
                 <AvatarImage src={user?.picture} alt={user?.name} />
                 <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>

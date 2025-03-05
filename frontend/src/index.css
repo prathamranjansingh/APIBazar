@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 60 2% 98%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
@@ -105,6 +105,11 @@
   border-right-color: rgba(255, 255, 255, 0.7);
   animation: spinner-anim 0.8s linear infinite;
 }
+
+.font-bricolage {
+  @apply tracking-[0.01px];
+}
+
 
 @keyframes spinner-anim {
   from {

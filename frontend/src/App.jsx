@@ -12,7 +12,7 @@ import { UserProvider, UserContext } from "./contexts/user-context";
 import Layout from "./components/layout";
 import Dashboard from "./pages/dashboard";
 import ApisList from "./pages/apis-list";
-import CreateApi from "./pages/create-api";
+import CreateApi from "./pages/create-api.jsx";
 import ApiDetail from "./pages/api-detail";
 import Analytics from "./pages/analytics";
 
@@ -47,7 +47,7 @@ function App() {
                 <Route path="/lay" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                   <Route index element={<Dashboard />} />
                   <Route path="apis" element={<ApisList />} />
-                  <Route path="apis/create" element={<CreateApi />} />
+                  <Route path="/lay/apis/create" element={<CreateApi />} />
                   <Route path="apis/:id" element={<ApiDetail />} />
                   <Route path="analytics" element={<Analytics />} />
                 </Route>
