@@ -40,6 +40,7 @@ model Api {
   category      String
   documentation String          // Can be used for Markdown or Notion-like storage
   pricingModel  PricingModel
+  price         Float?          // Price for PAID or SUBSCRIPTION models
   baseUrl       String
   ownerId       String
   owner         User            @relation(fields: [ownerId], references: [id])
@@ -53,10 +54,10 @@ model Api {
   updatedAt     DateTime @updatedAt
 }
 
+
 enum PricingModel {
   FREE
   PAID
-  SUBSCRIPTION
 }
 
 model Endpoint {

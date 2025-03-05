@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
-import { ApiRequestBody, EndpointRequestBody } from "../../utils/types";
 import { AuthenticatedRequest } from "../../utils/types";
 import { apiSchema } from "../../utils/validators";
 const prisma = new PrismaClient();
@@ -23,10 +22,19 @@ export const createApi = async (req: AuthenticatedRequest, res: Response): Promi
     return res.status(400).json({ error: validated.error.format() });
   }
 
+  const { pricingModel, price, ...rest } = validated.data;
+
+  // Validate price for PAID models
+  if (pricingModel === "PAID" && (price === null || price === undefined)) {
+    return res.status(400).json({ error: "Price is required for PAID models." });
+  }
+
   try {
     const api = await prisma.api.create({
       data: {
-        ...validated.data,
+        ...rest,
+        pricingModel,
+        price: pricingModel === "FREE" ? null : price, // Set price only for PAID APIs
         ownerId: req.auth.sub,
         documentation: validated.data.documentation ?? "",
       },
@@ -36,6 +44,8 @@ export const createApi = async (req: AuthenticatedRequest, res: Response): Promi
     res.status(500).json({ error: "Failed to create API" });
   }
 };
+
+
 
 
 
