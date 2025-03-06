@@ -1,39 +1,43 @@
 import { Request } from "express";
+import { NotificationType } from "@prisma/client";
 
-export interface ApiRequestBody {
-    name: string;
-    description: string;
-    category: string;
-    pricingModel: "FREE" | "PAID" | "SUBSCRIPTION";
-    baseUrl: string;
-    ownerId: string;
-    documentation: string;
-  }
-  
-  export interface EndpointRequestBody {
-    apiId: string;
-    method: string;
-    path: string;
-    description: string;
-    headers: object;
-    requestBody: object;
-    response: object;
-  }
-  
-  export interface IEndpoint {
-    id: string;
-    apiId: string;
-    method: string;
-    path: string;
-    description: string;
-    headers: Record<string, unknown>; 
-    requestBody: Record<string, unknown>; 
-    response: Record<string, unknown>;
-    createdAt?: Date;
-    updatedAt?: Date;
-  }
-  
-
+// Interface for requests with authentication (Auth0)
 export interface AuthenticatedRequest extends Request {
-  auth?: { sub: string }; 
+  auth?: {
+    sub: string; // Auth0 user ID
+    [key: string]: any;
+  };
+  user?: { id: string; auth0Id: string; email?: string };
+}
+
+// Interface for notification data
+export interface NotificationData {
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data?: any;
+}
+
+// Interface for webhook event data
+export interface WebhookData {
+  apiId: string;
+  event: string;
+  payload: any;
+}
+
+// Interface for rate limit configuration
+export interface RateLimitOptions {
+  maxRequests: number;  // Number of requests allowed
+  windowMs: number;     // Time window in milliseconds
+  message?: string;     // Custom error message
+}
+
+// Interface for API key details
+export interface ApiKeyData {
+  userId: string;
+  apiId: string;
+  name?: string | null;
+  rateLimit?: number;
+  expiresAt?: Date | null;
 }
