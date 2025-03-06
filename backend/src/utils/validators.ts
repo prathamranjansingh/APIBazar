@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { PricingModel } from "@prisma/client";
 
 export const userRegistrationSchema = z.object({
   email: z.string().email({ message: "Invalid email format" }),
@@ -13,32 +12,13 @@ export const userLoginSchema = z.object({
 });
 
 
-
 export const apiSchema = z.object({
-  name: z.string().min(3, { message: "API name must be at least 3 characters long" }),
-  description: z.string().min(10, { message: "Description must be at least 10 characters long" }),
-  category: z.string().min(3, { message: "Category must be at least 3 characters long" }),
-  pricingModel: z.nativeEnum(PricingModel),
-  baseUrl: z.string().url({ message: "Invalid URL format" }),
+  name: z.string().min(3),
+  description: z.string().optional(),
+  category: z.string(),
   documentation: z.string().optional(),
-  price: z.number().positive({ message: "Price must be greater than 0" }).optional(),
-}).superRefine((data, ctx) => {
-  if (data.pricingModel === "PAID" && (data.price === null || data.price === undefined)) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["price"],
-      message: "Price is required for PAID models.",
-    });
-  }
-
-  if (data.pricingModel === "FREE" && data.price !== undefined) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["price"],
-      message: "Price should not be provided for FREE models.",
-    });
-  }
+  pricingModel: z.enum(["FREE", "PAID"]),
+  price: z.number().optional(),
+  baseUrl: z.string().url(),
+  rateLimit: z.number().default(100),
 });
-
-
-

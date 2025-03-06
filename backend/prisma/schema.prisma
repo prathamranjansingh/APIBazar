@@ -7,6 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// User Management - simplified
 model User {
   id                    String          @id @default(uuid())
   auth0Id               String          @unique
@@ -19,41 +20,46 @@ model User {
   apiKeys               ApiKey[]
   purchasedAPIs         PurchasedAPI[]
   listedAPIs            Api[]
-  transactionsAsBuyer   Transaction[] @relation("buyerTransaction")
-  transactionsAsSeller  Transaction[] @relation("sellerTransaction")
+  transactionsAsBuyer   Transaction[]   @relation("buyerTransaction")
+  transactionsAsSeller  Transaction[]   @relation("sellerTransaction")
   reviews               Review[]
+  reviewsReceived       Review[]        @relation("receivedReviews")
+  notifications         Notification[]
+  webhooks              Webhook[]
 }
 
 model Profile {
-  id        String  @id @default(uuid())
-  userId    String  @unique
-  user      User    @relation(fields: [userId], references: [id])
-  bio       String?
-  location  String?
-  website   String?
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio             String?
+  location        String?
+  website         String?
+  company         String?
 }
 
 model Api {
-  id            String          @id @default(uuid())
-  name          String
-  description   String
-  category      String
-  documentation String          // Can be used for Markdown or Notion-like storage
-  pricingModel  PricingModel
-  price         Float?          // Price for PAID or SUBSCRIPTION models
-  baseUrl       String
-  ownerId       String
-  owner         User            @relation(fields: [ownerId], references: [id])
-  endpoints     Endpoint[]
-  analytics     ApiAnalytics?
-  transactions  Transaction[]
-  reviews       Review[]
-  purchasedBy   PurchasedAPI[]
-  apiKeys       ApiKey[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String          @id @default(uuid())
+  name            String
+  description     String
+  category        String
+  documentation   String
+  pricingModel    PricingModel
+  price           Float?
+  baseUrl         String
+  ownerId         String
+  rateLimit       Int             @default(100)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  owner           User            @relation(fields: [ownerId], references: [id])
+  endpoints       Endpoint[]
+  analytics       ApiAnalytics?
+  transactions    Transaction[]
+  reviews         Review[]
+  purchasedBy     PurchasedAPI[]
+  apiKeys         ApiKey[]
+  webhooks        Webhook[]
 }
-
 
 enum PricingModel {
   FREE
@@ -61,69 +67,148 @@ enum PricingModel {
 }
 
 model Endpoint {
-  id          String @id @default(uuid())
-  apiId       String
-  api         Api    @relation(fields: [apiId], references: [id])
-  method      String // GET, POST, PUT, DELETE, etc.
-  path        String // "/users", "/posts/:id"
-  description String?
-  headers     Json?
-  requestBody Json?
-  response    Json? 
+  id              String    @id @default(uuid())
+  apiId           String
+  api             Api       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  name            String
+  method          String
+  path            String
+  description     String?
+  headers         Json?
+  requestBody     Json?
+  responseSchema  Json?
+  rateLimit       Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  @@unique([apiId, path, method])
 }
 
+// Analytics
 model ApiAnalytics {
   id               String   @id @default(uuid())
   apiId            String   @unique
-  api              Api      @relation(fields: [apiId], references: [id])
+  api              Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
   totalCalls       Int      @default(0)
+  successCalls     Int      @default(0)
+  failedCalls      Int      @default(0)
   errorRate        Float    @default(0.0)
   responseTimeAvg  Float    @default(0.0)
-  updatedAt        DateTime @updatedAt
+  lastUpdated      DateTime @updatedAt
   @@index([apiId])
 }
 
-model ApiKey {
-  id        String @id @default(uuid())
-  apiId     String
-  api       Api    @relation(fields: [apiId], references: [id])
-  userId    String
-  user      User   @relation(fields: [userId], references: [id])
-  key       String @unique
-  rateLimit Int    @default(1000) // Max requests per month
-  expiresAt DateTime? // Optional expiration
-  createdAt DateTime @default(now())
+// Rate Limiting
+model RateLimitLog {
+  id            String    @id @default(uuid())
+  apiKeyId      String
+  apiKey        ApiKey    @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  timestamp     DateTime  @default(now())
+  count         Int       @default(1)
+  ip            String?
+  endpoint      String?
+  @@index([apiKeyId, timestamp])
 }
 
+// API Access
+model ApiKey {
+  id            String          @id @default(uuid())
+  apiId         String
+  api           Api             @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key           String          @unique
+  name          String?
+  rateLimit     Int             @default(1000)
+  isActive      Boolean         @default(true)
+  expiresAt     DateTime?
+  createdAt     DateTime        @default(now())
+  lastUsed      DateTime?
+  rateLimitLogs RateLimitLog[]
+  @@index([apiId, userId])
+}
+
+// Webhooks
+model Webhook {
+  id            String          @id @default(uuid())
+  name          String
+  url           String
+  secret        String?
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId         String
+  api           Api             @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  events        String[]
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  lastTriggered DateTime?
+  lastStatus    Int?
+  failCount     Int             @default(0)
+  @@index([apiId, isActive])
+}
+
+// Notifications
+model Notification {
+  id            String            @id @default(uuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          NotificationType
+  title         String
+  message       String
+  isRead        Boolean           @default(false)
+  data          Json?
+  createdAt     DateTime          @default(now())
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  API_PURCHASED
+  PURCHASE_CONFIRMED
+  API_UPDATED
+  NEW_REVIEW
+  RATE_LIMIT_REACHED
+  PAYMENT_RECEIVED
+  SYSTEM
+  API_CREATED
+}
+
+// Marketplace features
 model PurchasedAPI {
-  id        String @id @default(uuid())
-  userId    String
-  user      User   @relation(fields: [userId], references: [id])
-  apiId     String
-  api       Api    @relation(fields: [apiId], references: [id])
-  createdAt DateTime @default(now())
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiId         String
+  api           Api       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  createdAt     DateTime  @default(now())
+  @@unique([userId, apiId])
 }
 
 model Transaction {
-  id        String   @id @default(uuid())
-  buyerId   String
-  sellerId  String
-  apiId     String
-  amount    BigInt
-  createdAt DateTime @default(now())
-  buyer     User @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
-  seller    User @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
-  api       Api  @relation(fields: [apiId], references: [id])
+  id            String    @id @default(uuid())
+  buyerId       String
+  sellerId      String
+  apiId         String
+  amount        Float
+  status        String    @default("completed")
+  createdAt     DateTime  @default(now())
+  buyer         User      @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
+  seller        User      @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
+  api           Api       @relation(fields: [apiId], references: [id])
   @@index([buyerId, apiId])
+  @@index([sellerId])
 }
 
+// Social features
 model Review {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  apiId     String
-  api       Api      @relation(fields: [apiId], references: [id])
-  rating    Int
-  comment   String?
-  createdAt DateTime @default(now())
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  apiId         String
+  api           Api       @relation(fields: [apiId], references: [id])
+  authorId      String?
+  author        User?     @relation("receivedReviews", fields: [authorId], references: [id], onDelete: SetNull)
+  rating        Int
+  comment       String?
+  createdAt     DateTime  @default(now())
+  @@unique([userId, apiId])
 }
