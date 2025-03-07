@@ -1,7 +1,7 @@
-import { FeaturesSection } from "../components/FeaturesSection";
-import { FinalQuote } from "../components/FinalQuote";
-import { SiteFooter } from "../components/Footer";
-import { SiteHeader } from "../components/Header";
+import { FeaturesSection } from "../components/home/FeaturesSection";
+import { FinalQuote } from "../components/home/FinalQuote";
+import { SiteFooter } from "../components/home/Footer";
+import { SiteHeader } from "../components/home/Header";
 import { HeroSection } from "../components/HeroSection";
 
 

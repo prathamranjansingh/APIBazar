@@ -8,6 +8,7 @@ export interface AuthenticatedRequest extends Request {
     [key: string]: any;
   };
   user?: { id: string; auth0Id: string; email?: string };
+  userId?: string;
 }
 
 // Interface for notification data

@@ -6,24 +6,35 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000"; 
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api"; 
 
-const authenticateUser = async (user) => {
+const authenticateUser = async (user, getToken) => {
   console.log("Authenticating user:", user);
-  
   try {
-    const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-      auth0Id: user.sub,
-      email: user.email,
-      name: user.name,
-      picture: user.picture,
-    });
-    return response.data.user;
+    // Get token from the passed function
+    const token = await getToken();
+    // Fix 3: Correct API path - remove the extra 'api' segment
+    const response = await axios.patch(
+      `${API_BASE_URL}/users/me`,
+      {
+        auth0Id: user.sub,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    return response.data;
   } catch (error) {
     console.error("Authentication error:", error);
     return null;
   }
 };
+
 
 
 const Dropdown = ({ title, links }) => (
@@ -73,7 +84,7 @@ const AuthButtons = ({ isAuthenticated, user, login, logout }) => (
 
 
 export function SiteHeader() {
-  const { loginWithRedirect, logout, user, isAuthenticated, isLoading } = useAuth0();
+  const { loginWithRedirect, logout, user, isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
   const [isOpen, setIsOpen] = useState(false);
   const [backendUser, setBackendUser] = useState(null);
 
@@ -82,11 +93,11 @@ export function SiteHeader() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      authenticateUser(user).then((data) => {
+      authenticateUser(user, getAccessTokenSilently).then((data) => {
         setBackendUser(data);
       });
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, getAccessTokenSilently]);
 
   // Memoized Authentication State
   const authState = useMemo(() => ({ isAuthenticated, user: backendUser || user }), [isAuthenticated, backendUser, user]);

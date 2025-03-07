@@ -24,7 +24,34 @@ export const checkJwt = expressjwt({
   algorithms: ["RS256"]
 });
 
-
+export const ensureUserExists = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.auth?.sub) {
+    return next();
+  }
+  try {
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub }
+    });
+    if (!user) {
+logger.warn(`User not found in database: ${req.auth.sub}`);
+      return res.status(401).json({
+        error: "User not found in database",
+        code: "user_not_synced"
+      });
+    }
+    // Add user ID to request
+    req.userId = user.id;
+    next();
+  } catch (error) {
+logger.error(`Error ensuring user exists: ${error}`);
+    next(error);
+  }
+};
 
 /**
  * Middleware to check if the authenticated user is the owner of the API.
