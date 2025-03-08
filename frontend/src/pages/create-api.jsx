@@ -82,6 +82,71 @@ function CreateApi() {
     }));
   };
 
+  const formatEndpointForApi = (endpoint) => {
+    try {
+      // Base endpoint data
+      const endpointData = {
+        name: endpoint.name || `${endpoint.method} ${endpoint.path}`,
+        method: endpoint.method,
+        path: endpoint.path,
+        description: endpoint.description || "",
+      };
+  
+      // Add rate limit if provided
+      if (endpoint.rateLimit && !isNaN(parseInt(endpoint.rateLimit))) {
+        endpointData.rateLimit = parseInt(endpoint.rateLimit);
+      }
+  
+      // Add headers if provided (convert to proper JSON)
+      if (endpoint.headers) {
+        try {
+          endpointData.headers =
+            typeof endpoint.headers === "string"
+              ? JSON.parse(endpoint.headers)
+              : endpoint.headers;
+        } catch (e) {
+          console.warn("Invalid headers JSON:", e);
+        }
+      }
+  
+      // Add request body if provided (convert to proper JSON)
+      if (endpoint.requestBody && endpoint.requestBody.trim()) {
+        try {
+          endpointData.requestBody =
+            typeof endpoint.requestBody === "string"
+              ? JSON.parse(endpoint.requestBody)
+              : endpoint.requestBody;
+        } catch (e) {
+          console.warn("Invalid request body JSON:", e);
+        }
+      }
+  
+      // Add response schema if provided (convert to proper JSON)
+      if (endpoint.responseExample && endpoint.responseExample.trim()) {
+        try {
+          endpointData.responseSchema =
+            typeof endpoint.responseExample === "string"
+              ? JSON.parse(endpoint.responseExample)
+              : endpoint.responseExample;
+        } catch (e) {
+          console.warn("Invalid response schema JSON:", e);
+        }
+      }
+  
+      // Strip any undefined or null values
+      Object.keys(endpointData).forEach(
+        (key) =>
+          (endpointData[key] === undefined || endpointData[key] === null) &&
+          delete endpointData[key]
+      );
+  
+      return endpointData;
+    } catch (error) {
+      console.error("Error formatting endpoint:", error);
+      return null;
+    }
+  };
+
   // Form submission handler
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -127,63 +192,46 @@ function CreateApi() {
 
       // Step 2: If API has endpoints, create them
       // Step 2: If API has endpoints, create them
-      if (formData.endpoints.length > 0) {
-        try {
-          // Map through each endpoint and prepare the data
-          const endpointPromises = formData.endpoints.map((endpoint) => {
-            // Prepare the endpoint data in the correct format
-            const endpointData = {
-              name: endpoint.name || `${endpoint.method} ${endpoint.path}`,
-              method: endpoint.method,
-              path: endpoint.path,
-              description: endpoint.description || "",
-              rateLimit: endpoint.rateLimit || null,
-            };
-      
-            // Safely handle JSON parsing for request body
-            if (endpoint.requestBody && endpoint.requestBody.trim()) {
-              try {
-                endpointData.requestBody = JSON.parse(endpoint.requestBody);
-              } catch (err) {
-                console.warn(`Invalid request body JSON for endpoint ${endpoint.path}:`, err);
-                // Use an empty object as fallback
-                endpointData.requestBody = {};
-              }
-            }
-      
-            // Safely handle JSON parsing for response example
-            if (endpoint.responseExample && endpoint.responseExample.trim()) {
-              try {
-                endpointData.responseSchema = JSON.parse(endpoint.responseExample);
-              } catch (err) {
-                console.warn(`Invalid response example JSON for endpoint ${endpoint.path}:`, err);
-                // Use an empty object as fallback
-                endpointData.responseSchema = {};
-              }
-            }
-      
-            // Add parameters if they exist
-            if (endpoint.parameters && endpoint.parameters.length > 0) {
-              endpointData.parameters = endpoint.parameters;
-            }
-      
-            console.log("Creating endpoint with data:", endpointData);
-      
-            // Make the POST request to create the endpoint
-            return post(`${API_BASE_URL}/apis/${newApi.id}/endpoints`, endpointData, { requireAuth: true });
-          });
-      
-          // Wait for all endpoint creation requests to complete
-          await Promise.all(endpointPromises);
-        } catch (endpointError) {
-          console.error("Error creating endpoints:", endpointError);
-      
-          // Show a warning toast but don't stop execution - the API was already created
-          toast.error("Warning", {
-            description: "API was created but there was an error adding some endpoints.",
-          });
-        }
+      // Inside handleSubmit function
+// If API has endpoints, create them
+if (formData.endpoints.length > 0) {
+  try {
+    console.log("Creating endpoints for API:", newApi.id);
+
+    for (const endpoint of formData.endpoints) {
+      // Format the endpoint data correctly
+      const endpointData = formatEndpointForApi(endpoint);
+
+      if (!endpointData) {
+        console.error("Failed to format endpoint:", endpoint);
+        continue; // Skip this endpoint if formatting failed
       }
+
+      // Log the data being sent (for debugging)
+      console.log(`Creating endpoint ${endpointData.name} with data:`, endpointData);
+
+      try {
+        // Create one endpoint at a time instead of using Promise.all
+        await post(`${API_BASE_URL}/apis/${newApi.id}/endpoints`, endpointData, { requireAuth: true });
+        console.log(`Endpoint ${endpointData.name} created successfully`);
+      } catch (endpointError) {
+        console.error(`Error creating endpoint ${endpointData.name}:`, endpointError);
+
+        // Show specific error message for this endpoint
+        toast.error("Endpoint Creation Error", {
+          description: `Failed to create endpoint ${endpointData.name}: ${
+            endpointError.response?.data?.error || endpointError.message
+          }`,
+        });
+      }
+    }
+  } catch (allEndpointsError) {
+    console.error("Error in endpoints creation process:", allEndpointsError);
+    toast.error("Warning", {
+      description: "API was created but there was an error adding the endpoints.",
+    });
+  }
+}
 
 
       toast.success("API Created", {
