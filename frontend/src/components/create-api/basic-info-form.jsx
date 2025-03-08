@@ -1,22 +1,12 @@
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Category options
-const CATEGORIES = [
-  { value: "GENERAL", label: "General" },
-  { value: "FINANCE", label: "Finance" },
-  { value: "WEATHER", label: "Weather" },
-  { value: "SOCIAL", label: "Social" },
-  { value: "ECOMMERCE", label: "E-Commerce" },
-  { value: "COMMUNICATION", label: "Communication" },
-  { value: "DATA", label: "Data & Analytics" },
-  { value: "OTHER", label: "Other" },
-]
-
-function BasicInfoForm({ formData, handleChange }) {
+function BasicInfoForm({ formData, handleChange, categories, updateFormData }) {
   return (
     <>
+      {/* API Name Field */}
       <div className="space-y-2">
         <Label htmlFor="name">
           API Name <span className="text-destructive">*</span>
@@ -29,37 +19,10 @@ function BasicInfoForm({ formData, handleChange }) {
           onChange={handleChange}
           required
         />
+        <p className="text-sm text-muted-foreground">Choose a descriptive name for your API</p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          name="description"
-          placeholder="Describe what your API does..."
-          value={formData.description}
-          onChange={handleChange}
-          rows={4}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="category">Category</Label>
-        <select
-          id="category"
-          name="category"
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          value={formData.category}
-          onChange={handleChange}
-        >
-          {CATEGORIES.map((category) => (
-            <option key={category.value} value={category.value}>
-              {category.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
+      {/* Base URL Field */}
       <div className="space-y-2">
         <Label htmlFor="baseUrl">
           Base URL <span className="text-destructive">*</span>
@@ -72,11 +35,48 @@ function BasicInfoForm({ formData, handleChange }) {
           onChange={handleChange}
           required
         />
-        <p className="text-sm text-muted-foreground">The base URL for your API (e.g., https://api.example.com)</p>
+        <p className="text-sm text-muted-foreground">The root URL for your API, without any path components</p>
+      </div>
+
+      {/* Category Field */}
+      <div className="space-y-2">
+        <Label htmlFor="category">Category <span className="text-destructive">*</span></Label>
+        <Select
+          value={formData.category}
+          onValueChange={(value) => updateFormData({ category: value })}
+        >
+          <SelectTrigger id="category" className="w-full">
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground">Categorizing your API helps users discover it more easily</p>
+      </div>
+
+      {/* Description Field */}
+      <div className="space-y-2">
+        <Label htmlFor="description">
+          Description <span className="text-destructive">*</span>
+        </Label>
+        <Textarea
+          id="description"
+          name="description"
+          placeholder="Describe what your API does and the problems it solves..."
+          value={formData.description}
+          onChange={handleChange}
+          rows={4}
+          required
+        />
+        <p className="text-sm text-muted-foreground">This will be displayed in API listings and search results</p>
       </div>
     </>
-  )
+  );
 }
 
-export default BasicInfoForm
-
+export default BasicInfoForm;

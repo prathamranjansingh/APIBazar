@@ -1,8 +1,8 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { useAuth0 } from "@auth0/auth0-react"
+"use client";
+import { useState, useEffect } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
+import { useUser } from "@/contexts/user-context";
 import {
   SidebarProvider,
   Sidebar,
@@ -19,9 +19,9 @@ import {
   SidebarInset,
   SidebarTrigger,
   SidebarRail,
-} from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+} from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,8 +29,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { ModeToggle } from "@/components/mode-toggle"
+} from "@/components/ui/dropdown-menu";
+import { ModeToggle } from "@/components/mode-toggle";
 import {
   Loader2,
   Home,
@@ -44,45 +44,69 @@ import {
   Bell,
   HelpCircle,
   BookOpen,
-  Zap,
-  Star,
-  PlusCircle,
-} from "lucide-react"
-import { toast } from "sonner"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
+  Key,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
 
 function Layout() {
-  const { isAuthenticated, isLoading, loginWithRedirect, logout, user, getAccessTokenSilently } = useAuth0()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const [token, setToken] = useState(null)
-  const [notifications, setNotifications] = useState(3)
+  const { isAuthenticated, isLoading, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0();
+  const { user, loading: userLoading, getNotifications } = useUser();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [token, setToken] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(true);
 
+  // Get token and store it for API calls
   useEffect(() => {
     if (isAuthenticated) {
       const getToken = async () => {
         try {
-          const accessToken = await getAccessTokenSilently()
-          setToken(accessToken)
-          localStorage.setItem("auth_token", accessToken)
+          const accessToken = await getAccessTokenSilently();
+          setToken(accessToken);
+          localStorage.setItem("auth_token", accessToken);
         } catch (error) {
-          console.error("Error getting token:", error)
+          console.error("Error getting token:", error);
           toast.error("Authentication Error", {
             description: "Failed to get authentication token. Please try logging in again.",
-          })
+          });
         }
-      }
-      getToken()
+      };
+      getToken();
     }
-  }, [isAuthenticated, getAccessTokenSilently])
+  }, [isAuthenticated, getAccessTokenSilently]);
 
-  if (isLoading) {
+  // Fetch notification count
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const fetchNotifications = async () => {
+        try {
+          setIsNotificationsLoading(true);
+          const { unreadCount } = await getNotifications(true);
+          setUnreadCount(unreadCount);
+        } catch (error) {
+          console.error("Error fetching notifications:", error);
+        } finally {
+          setIsNotificationsLoading(false);
+        }
+      };
+      fetchNotifications();
+      // Set up interval to check for new notifications
+      const interval = setInterval(fetchNotifications, 60000); // Check every minute
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, user, getNotifications]);
+
+  if (isLoading || userLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
-    )
+    );
   }
 
   if (!isAuthenticated) {
@@ -94,7 +118,7 @@ function Layout() {
         </div>
         <Button onClick={() => loginWithRedirect()}>Sign In</Button>
       </div>
-    )
+    );
   }
 
   const mainMenuItems = [
@@ -102,21 +126,16 @@ function Layout() {
     { name: "My APIs", path: "/lay/apis", icon: Code2 },
     { name: "Analytics", path: "/lay/analytics", icon: BarChart3 },
     { name: "Marketplace", path: "/lay/marketplace", icon: ShoppingBag },
-  ]
-
-  const favoriteApis = [
-    { name: "User Authentication", path: "/lay/apis/auth", icon: "🔐" },
-    { name: "Payment Processing", path: "/lay/apis/payment", icon: "💳" },
-    { name: "Data Analytics", path: "/lay/apis/analytics", icon: "📊" },
-  ]
+    { name: "API Keys", path: "/lay/keys", icon: Key },
+  ];
 
   // Helper function to check if a path is active
   const isPathActive = (path) => {
     if (path === "/lay" && location.pathname === "/lay") {
-      return true
+      return true;
     }
-    return location.pathname.startsWith(path) && path !== "/lay"
-  }
+    return location.pathname.startsWith(path) && path !== "/lay";
+  };
 
   return (
     <SidebarProvider>
@@ -127,14 +146,13 @@ function Layout() {
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
                 <Code2 className="h-5 w-5" />
               </div>
-              <span className="font-bold text-lg">API Market</span>
+              <span className="font-bold text-lg">API Bazar</span>
             </div>
             <div className="relative mt-2">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search APIs..." className="pl-9 h-9 bg-muted/50 border-none" />
             </div>
           </SidebarHeader>
-
           <SidebarContent className="px-2">
             <SidebarGroup>
               <SidebarGroupLabel>Main Navigation</SidebarGroupLabel>
@@ -153,32 +171,26 @@ function Layout() {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-
             <SidebarSeparator className="my-2" />
-
             <SidebarGroup>
               <SidebarGroupLabel className="flex items-center justify-between">
-                <span>Favorite APIs</span>
-                <Star className="h-4 w-4 text-muted-foreground" />
+                <span>Purchased APIs</span>
+                <ShoppingBag className="h-4 w-4 text-muted-foreground" />
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {favoriteApis.map((api) => (
-                    <SidebarMenuItem key={api.path}>
-                      <SidebarMenuButton asChild isActive={isPathActive(api.path)} className="transition-colors">
-                        <button onClick={() => navigate(api.path)} className="flex items-center w-full">
-                          <span className="flex h-4 w-4 items-center justify-center text-xs mr-2">{api.icon}</span>
-                          <span>{api.name}</span>
-                        </button>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild className="transition-colors">
+                      <button onClick={() => navigate("/lay/purchased")} className="flex items-center w-full">
+                        <span className="flex h-4 w-4 items-center justify-center text-xs mr-2">🛒</span>
+                        <span>View All Purchased APIs</span>
+                      </button>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-
             <SidebarSeparator className="my-2" />
-
             <SidebarGroup>
               <SidebarGroupLabel>Support</SidebarGroupLabel>
               <SidebarGroupContent>
@@ -203,7 +215,6 @@ function Layout() {
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
-
           <SidebarFooter className="border-t p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -239,12 +250,12 @@ function Layout() {
             <div className="mt-3 flex justify-between items-center">
               <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/lay/notifications")}>
                 <Bell className="h-4 w-4" />
-                {notifications > 0 && (
+                {!isNotificationsLoading && unreadCount > 0 && (
                   <Badge
                     className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]"
                     variant="destructive"
                   >
-                    {notifications}
+                    {unreadCount}
                   </Badge>
                 )}
               </Button>
@@ -256,7 +267,6 @@ function Layout() {
           </SidebarFooter>
           <SidebarRail />
         </Sidebar>
-
         <SidebarInset className="w-full h-full flex flex-col">
           <header className="border-b py-3 px-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
             <div className="flex items-center gap-3">
@@ -278,8 +288,7 @@ function Layout() {
         </SidebarInset>
       </div>
     </SidebarProvider>
-  )
+  );
 }
 
-export default Layout
-
+export default Layout;

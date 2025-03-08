@@ -1,55 +1,152 @@
-"use client"
+"use client";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useUser } from "../contexts/user-context";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Code2, Plus, Users, DollarSign, Activity, Clock, ShoppingBag } from "lucide-react";
+import axios from "axios";
+import { useAuth0 } from "@auth0/auth0-react";
 
-import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { useApi } from "../contexts/api-context"
-import { useUser } from "../contexts/user-context"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Code2, Plus, Users, DollarSign, Activity, Clock, ShoppingBag } from "lucide-react"
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
 
 function Dashboard() {
-  const navigate = useNavigate()
-  const { apis, loading, fetchApis } = useApi()
-  const { user } = useUser()
+  const navigate = useNavigate();
+  const { user } = useUser();
+  const { getAccessTokenSilently } = useAuth0();
+  const [loading, setLoading] = useState(true);
+  const [apis, setApis] = useState([]);
+  const [purchasedApis, setPurchasedApis] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [stats, setStats] = useState({
     totalApis: 0,
     totalCalls: 0,
     totalRevenue: 0,
-    recentActivity: [],
-  })
+    activeUsers: 0,
+  });
 
+  // Fetch user's APIs
   useEffect(() => {
-    fetchApis()
-  }, [fetchApis])
+    const fetchUserData = async () => {
+      try {
+        setLoading(true);
+        const token = await getAccessTokenSilently();
 
-  useEffect(() => {
-    if (apis.length > 0) {
-      // In a real app, you would fetch these stats from your backend
-      setStats({
-        totalApis: apis.length,
-        totalCalls: apis.reduce((sum, api) => sum + (api.analytics?.totalCalls || 0), 0),
-        totalRevenue: 1250, // Example value
-        recentActivity: [
-          { type: "purchase", apiName: "Weather API", time: "2 hours ago", amount: 25 },
-          { type: "call", apiName: "Geocoding API", time: "5 hours ago", count: 150 },
-          { type: "review", apiName: "Translation API", time: "1 day ago", rating: 5 },
-        ],
-      })
+        // Fetch APIs created by the user
+        const [apisResponse, purchasedResponse, analyticsResponse] = await Promise.all([
+          // Get APIs created by user
+          axios.get(`${API_BASE_URL}/apis/user/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          // Get APIs purchased by user
+          axios.get(`${API_BASE_URL}/apis/user/purchased`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          // Simulate analytics data
+          Promise.resolve({
+            data: {
+              totalCalls: 0,
+              totalRevenue: 0,
+              activeUsers: 0,
+            },
+          }),
+        ]);
+
+        // Set the data in state
+        setApis(apisResponse.data || []);
+        setPurchasedApis(purchasedResponse.data || []);
+
+        // Calculate statistics
+        const totalApis = apisResponse.data.length;
+        const totalCalls = apisResponse.data.reduce((sum, api) => sum + (api.analytics?.totalCalls || 0), 0);
+
+        // Get transaction data (this would come from a real endpoint)
+        const recentActivity = getRecentActivity(apisResponse.data, purchasedResponse.data);
+
+        // Set statistics
+        setStats({
+          totalApis,
+          totalCalls,
+          totalRevenue: analyticsResponse.data.totalRevenue || 0,
+          activeUsers: analyticsResponse.data.activeUsers || 0,
+          recentActivity,
+        });
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchUserData();
     }
-  }, [apis])
+  }, [user, getAccessTokenSilently]);
 
-  if (loading && !apis.length) {
-    return <DashboardSkeleton />
+  // Helper function to generate recent activity from API data
+  const getRecentActivity = (createdApis, purchasedApis) => {
+    const activity = [];
+
+    // Add purchase activities
+    if (purchasedApis.length) {
+      purchasedApis.slice(0, 3).forEach((api) => {
+        activity.push({
+          type: "purchase",
+          apiName: api.name,
+          time: formatTimestamp(api.createdAt),
+          amount: api.price || 0,
+        });
+      });
+    }
+
+    // Add call activities (example)
+    if (createdApis.length) {
+      createdApis
+        .filter((api) => api.analytics?.totalCalls > 0)
+        .slice(0, 3)
+        .forEach((api) => {
+          activity.push({
+            type: "call",
+            apiName: api.name,
+            time: "Recently",
+            count: api.analytics?.totalCalls || 0,
+          });
+        });
+    }
+
+    // Sort by most recent (this is just example data)
+    return activity.slice(0, 5);
+  };
+
+  // Format timestamps for display
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return "Recently";
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+    if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    } else {
+      return "Recently";
+    }
+  };
+
+  if (loading) {
+    return <DashboardSkeleton />;
   }
 
   return (
     <div className="space-y-6 w-full font-bricolage h-full">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold  tracking-tight">Welcome back, {user?.name}</h2>
-        <Button onClick={() => navigate("/apis/create")}>
+        <h2 className="text-3xl font-bold tracking-tight">Welcome back, {user?.name}</h2>
+        <Button onClick={() => navigate("/lay/create-api")}>
           <Plus className="mr-2 h-4 w-4" /> Create API
         </Button>
       </div>
@@ -78,7 +175,7 @@ function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalCalls.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.totalCalls > 0 ? "+12% from last month" : "No API calls yet"}
+              {stats.totalCalls > 0 ? "From all your APIs" : "No API calls yet"}
             </p>
           </CardContent>
         </Card>
@@ -91,19 +188,21 @@ function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">${stats.totalRevenue.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.totalRevenue > 0 ? "+18% from last month" : "No revenue yet"}
+              {stats.totalRevenue > 0 ? "From paid APIs" : "No revenue yet"}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+            <CardTitle className="text-sm font-medium">API Keys</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+573</div>
-            <p className="text-xs text-muted-foreground">+201 since last week</p>
+            <div className="text-2xl font-bold">{purchasedApis.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {purchasedApis.length > 0 ? "Active API subscriptions" : "No purchased APIs"}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -140,7 +239,7 @@ function Dashboard() {
                     </div>
                   </CardContent>
                   <CardFooter className="bg-muted/50 p-3">
-                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/apis/${api.id}`)}>
+                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/lay/apis/${api.id}`)}>
                       View Details
                     </Button>
                   </CardFooter>
@@ -153,7 +252,7 @@ function Dashboard() {
                   <CardDescription>Create your first API to get started</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                  <Button onClick={() => navigate("/apis/create")}>
+                  <Button onClick={() => navigate("/lay/create-api")}>
                     <Plus className="mr-2 h-4 w-4" /> Create API
                   </Button>
                 </CardFooter>
@@ -169,7 +268,7 @@ function Dashboard() {
               <CardDescription>Your recent API activity and transactions</CardDescription>
             </CardHeader>
             <CardContent>
-              {stats.recentActivity.length > 0 ? (
+              {stats.recentActivity && stats.recentActivity.length > 0 ? (
                 <div className="space-y-4">
                   {stats.recentActivity.map((activity, index) => (
                     <div key={index} className="flex items-center gap-4">
@@ -208,25 +307,54 @@ function Dashboard() {
         </TabsContent>
 
         <TabsContent value="purchased">
-          <Card>
-            <CardHeader>
-              <CardTitle>Purchased APIs</CardTitle>
-              <CardDescription>APIs you have purchased from the marketplace</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <ShoppingBag className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground">No purchased APIs yet</p>
-                <Button variant="outline" className="mt-4" onClick={() => navigate("/marketplace")}>
-                  Browse Marketplace
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {purchasedApis.length > 0 ? (
+              purchasedApis.map((api) => (
+                <Card key={api.id} className="overflow-hidden">
+                  <CardHeader>
+                    <CardTitle>{api.name}</CardTitle>
+                    <CardDescription>
+                      {api.description?.substring(0, 100) || "No description provided"}
+                      {api.description?.length > 100 ? "..." : ""}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Code2 className="h-4 w-4" />
+                        <span>{api.endpoints?.length || 0} endpoints</span>
+                      </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Users className="h-4 w-4" />
+                        <span>By {api.owner?.name || "Unknown"}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-muted/50 p-3">
+                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/lay/apis/${api.id}`)}>
+                      View API
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <Card className="col-span-full">
+                <CardHeader>
+                  <CardTitle>No Purchased APIs</CardTitle>
+                  <CardDescription>You haven't purchased any APIs yet</CardDescription>
+                </CardHeader>
+                <CardFooter>
+                  <Button variant="outline" onClick={() => navigate("/lay/marketplace")}>
+                    Browse Marketplace
+                  </Button>
+                </CardFooter>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }
 
 function DashboardSkeleton() {
@@ -278,8 +406,7 @@ function DashboardSkeleton() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default Dashboard
-
+export default Dashboard;

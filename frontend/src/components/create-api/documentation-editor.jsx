@@ -1,596 +1,270 @@
-import { useState, useRef, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import {
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Link2,
-  Code,
-  Heading1,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  Quote,
-  Pilcrow,
-  FileCode,
-  ChevronDown,
-} from "lucide-react"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import CodeEditorModal from "./code-editor-modal"
-import useEditorSelection from "../../hooks/use-editor-selection"
+// src/components/create-api/documentation-editor.jsx
+import { useEffect, useRef } from "react";
+import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Bold, Italic, Link, List, ListOrdered, Heading1, Heading2, Code, Quote, Image } from "lucide-react";
 
 function DocumentationEditor({ formData, updateFormData, setEditorRef }) {
-  const editorRef = useRef(null)
-  const [showCodeEditor, setShowCodeEditor] = useState(false)
-  const [codeSnippet, setCodeSnippet] = useState("// Enter your code here")
-  const [codeLanguage, setCodeLanguage] = useState("javascript")
-  const [previewMode, setPreviewMode] = useState(false)
-  const [currentSelection, setCurrentSelection] = useState(null)
+  const editorRef = useRef(null);
 
-  // Set the editor ref for the parent component
+  // Initialize the editor with existing content and pass the ref to the parent
   useEffect(() => {
+    if (editorRef.current && formData.documentation) {
+      editorRef.current.innerHTML = formData.documentation;
+    }
     if (editorRef.current) {
-      setEditorRef(editorRef.current)
+      setEditorRef(editorRef.current);
     }
-  }, [setEditorRef])
+  }, [formData.documentation, setEditorRef]);
 
-  // Save current selection
-  const saveSelection = () => {
-    if (window.getSelection) {
-      const sel = window.getSelection()
-      if (sel.getRangeAt && sel.rangeCount) {
-        setCurrentSelection(sel.getRangeAt(0))
+  // Function to execute a formatting command
+  const execCommand = (command, value = null) => {
+    document.execCommand(command, false, value);
+    editorRef.current.focus();
+  };
+
+  // Insert a code block
+  const insertCodeBlock = () => {
+    const selection = window.getSelection();
+    const text = selection.toString();
+    const codeBlock = `<pre class="bg-muted p-4 rounded-md overflow-x-auto font-mono text-sm my-4">${
+      text || "Your code here"
+    }</pre>`;
+    document.execCommand("insertHTML", false, codeBlock);
+    editorRef.current.focus();
+  };
+
+  // Insert an example request
+  const insertRequestExample = () => {
+    const template = `
+<div class="border rounded-md p-4 my-4">
+  <h3 class="text-base font-semibold mb-2">Example Request</h3>
+  <pre class="bg-muted p-3 rounded-md overflow-x-auto font-mono text-sm">
+curl -X GET "${formData.baseUrl}/endpoint" \\
+-H "Authorization: Bearer YOUR_API_KEY" \\
+-H "Content-Type: application/json"
+  </pre>
+</div>
+`;
+    document.execCommand("insertHTML", false, template);
+    editorRef.current.focus();
+  };
+
+  // Insert an example response
+  const insertResponseExample = () => {
+    const template = `
+<div class="border rounded-md p-4 my-4">
+  <h3 class="text-base font-semibold mb-2">Example Response</h3>
+  <pre class="bg-muted p-3 rounded-md overflow-x-auto font-mono text-sm">
+{
+  "success": true,
+  "data": {
+    "id": 123,
+    "name": "Example",
+    "created": "2023-04-01T12:00:00Z"
+  }
+}
+  </pre>
+</div>
+`;
+    document.execCommand("insertHTML", false, template);
+    editorRef.current.focus();
+  };
+
+  // Insert a visual divider
+  const insertDivider = () => {
+    document.execCommand("insertHTML", false, '<hr class="my-6 border-t-2 border-muted">');
+    editorRef.current.focus();
+  };
+
+  // Insert endpoint documentation based on defined endpoints
+  const insertEndpointDocs = () => {
+    if (!formData.endpoints || formData.endpoints.length === 0) {
+      alert("No endpoints have been defined yet.");
+      return;
+    }
+
+    let endpointsHtml = '<div class="my-6"><h2 class="text-xl font-bold mb-4">API Endpoints</h2>';
+    formData.endpoints.forEach((endpoint, index) => {
+      const methodColorClass = {
+        GET: "bg-green-100 text-green-800",
+        POST: "bg-blue-100 text-blue-800",
+        PUT: "bg-yellow-100 text-yellow-800",
+        DELETE: "bg-red-100 text-red-800",
+        PATCH: "bg-purple-100 text-purple-800",
+      }[endpoint.method] || "bg-gray-100 text-gray-800";
+
+      endpointsHtml += `
+<div class="border rounded-md p-4 my-4">
+  <div class="flex items-center gap-2 mb-2">
+    <span class="px-2 py-1 rounded-md text-xs font-medium ${methodColorClass}">${endpoint.method}</span>
+    <code class="font-mono text-sm">${formData.baseUrl}${endpoint.path}</code>
+  </div>
+  ${endpoint.description ? `<p class="mb-3 text-muted-foreground">${endpoint.description}</p>` : ""}
+`;
+
+      // Parameters section
+      if (endpoint.parameters && endpoint.parameters.length > 0) {
+        endpointsHtml += `
+  <div class="mt-4">
+    <h4 class="text-sm font-semibold mb-2">Parameters</h4>
+    <div class="grid grid-cols-3 gap-2 text-sm">
+      <div class="font-medium">Name</div>
+      <div class="font-medium">Required</div>
+      <div class="font-medium">Description</div>
+`;
+        endpoint.parameters.forEach((param) => {
+          endpointsHtml += `
+      <div class="font-mono">${param.name}</div>
+      <div>${param.required ? "Yes" : "No"}</div>
+      <div>${param.description || "-"}</div>
+`;
+        });
+        endpointsHtml += `
+    </div>
+  </div>
+`;
       }
-    }
-  }
 
-  // Restore saved selection
-  const restoreSelection = () => {
-    if (currentSelection) {
-      if (window.getSelection) {
-        const sel = window.getSelection()
-        sel.removeAllRanges()
-        sel.addRange(currentSelection)
-      }
-    }
-  }
-
-  // Initialize editor content
-  useEffect(() => {
-    if (!formData.documentation && editorRef.current) {
-      const initialContent = generateInitialDocumentation(formData.name)
-      updateFormData({ documentation: initialContent })
-
-      if (editorRef.current) {
-        editorRef.current.innerHTML = initialContent
-      }
-    } else if (formData.documentation && editorRef.current) {
-      // Update the editor with the current documentation
-      editorRef.current.innerHTML = formData.documentation
-    }
-  }, [formData.name])
-
-  // Handle paste events to strip formatting
-  useEffect(() => {
-    const editor = editorRef.current
-    if (editor) {
-      const handlePaste = (e) => {
-        e.preventDefault()
-        const text = e.clipboardData?.getData("text/plain") || ""
-        
-        // Use the proper way to insert text
-        if (window.getSelection) {
-          const selection = window.getSelection()
-          if (selection.getRangeAt && selection.rangeCount) {
-            const range = selection.getRangeAt(0)
-            range.deleteContents()
-            const textNode = document.createTextNode(text)
-            range.insertNode(textNode)
-            
-            // Move the cursor to the end of the inserted text
-            range.setStartAfter(textNode)
-            range.setEndAfter(textNode)
-            selection.removeAllRanges()
-            selection.addRange(range)
-          }
-        }
-        
-        // Update form data
-        updateFormData({ documentation: editor.innerHTML })
+      // Request body section
+      if (endpoint.requestBody) {
+        endpointsHtml += `
+  <div class="mt-4">
+    <h4 class="text-sm font-semibold mb-2">Request Body</h4>
+    <pre class="bg-muted p-3 rounded-md overflow-x-auto font-mono text-sm">${JSON.stringify(
+      JSON.parse(endpoint.requestBody),
+      null,
+      2
+    )}</pre>
+  </div>
+`;
       }
 
-      editor.addEventListener("paste", handlePaste)
-      return () => {
-        editor.removeEventListener("paste", handlePaste)
+      // Response example section
+      if (endpoint.responseExample) {
+        endpointsHtml += `
+  <div class="mt-4">
+    <h4 class="text-sm font-semibold mb-2">Response</h4>
+    <pre class="bg-muted p-3 rounded-md overflow-x-auto font-mono text-sm">${JSON.stringify(
+      JSON.parse(endpoint.responseExample),
+      null,
+      2
+    )}</pre>
+  </div>
+`;
       }
-    }
-  }, [updateFormData])
 
-  // Generate initial documentation template based on API name
-  const generateInitialDocumentation = (apiName) => {
-    return `<h1 class="text-3xl font-bold font-bricolage mb-4 heading-1">API Documentation</h1>
-<p>Welcome to the documentation for ${apiName || "My API"}.</p>
-<h2 class="text-2xl font-bold font-bricolage mt-6 mb-3 heading-2">Authentication</h2>
-<p>Describe how to authenticate with your API. For example, you might use API keys or OAuth tokens.</p>
-<pre class="code-block language-javascript bg-muted p-4 rounded-md my-4 overflow-x-auto">
-<code>// Example authentication code
-fetch('https://api.example.com/data', {
-  headers: {
-    'Authorization': 'Bearer YOUR_API_KEY'
-  }
-})</code>
-</pre>
-<h2 class="text-2xl font-bold font-bricolage mt-6 mb-3 heading-2">Endpoints</h2>
-<p>List and describe your API endpoints.</p>
-<h3 class="text-xl font-bold font-bricolage mt-5 mb-2 heading-3">GET /users</h3>
-<p>Retrieves a list of users.</p>
-<p><strong>Query Parameters:</strong></p>
-<ul class="list-disc pl-6 my-2">
-  <li><code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">limit</code> - Maximum number of results to return</li>
-  <li><code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">offset</code> - Number of results to skip</li>
-</ul>
-<blockquote class="border-l-4 border-muted pl-4 italic text-muted-foreground my-4">
-  Note: This endpoint requires authentication.
-</blockquote>`
-  }
-
-  // Apply formatting to selected text
-  const applyFormatting = (command, value = null) => {
-    if (!editorRef.current) return
-    
-    // Focus editor and restore selection if needed
-    editorRef.current.focus()
-    restoreSelection()
-    
-    // Apply the formatting command
-    if (command === "strong" || command === "em" || command === "u") {
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0)
-        const selectedText = range.toString()
-        
-        if (selectedText) {
-          const element = document.createElement(command)
-          element.textContent = selectedText
-          range.deleteContents()
-          range.insertNode(element)
-          
-          // Set cursor position after the inserted element
-          range.setStartAfter(element)
-          range.setEndAfter(element)
-          selection.removeAllRanges()
-          selection.addRange(range)
-        }
-      }
-    } else {
-      // For other commands, use execCommand
-      document.execCommand(command, false, value)
-    }
-    
-    // Update the form data
-    updateFormData({ documentation: editorRef.current.innerHTML })
-    
-    // Save the new selection
-    saveSelection()
-  }
-
-  // Insert heading at current selection
-  const insertHeading = (level) => {
-    if (!editorRef.current) return
-    
-    // Focus editor and restore selection
-    editorRef.current.focus()
-    restoreSelection()
-    
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
-    
-    const range = selection.getRangeAt(0)
-    let selectedText = range.toString()
-    
-    if (!selectedText) {
-      selectedText = `Heading ${level}`
-    }
-    
-    // Create the heading element
-    const headingElement = document.createElement(`h${level}`)
-    headingElement.className = `text-${level === 1 ? "3xl" : level === 2 ? "2xl" : level === 3 ? "xl" : "lg"} font-bold font-bricolage heading-${level}`
-    headingElement.textContent = selectedText
-    
-    // Insert the heading
-    range.deleteContents()
-    range.insertNode(headingElement)
-    
-    // Move cursor after the heading
-    range.setStartAfter(headingElement)
-    selection.removeAllRanges()
-    selection.addRange(range)
-    
-    // Update form data
-    updateFormData({ documentation: editorRef.current.innerHTML })
-    
-    // Save the selection
-    saveSelection()
-  }
-
-  // Handle editor content changes
-  const handleEditorInputChange = (e) => {
-    // Update the form data with new content
-    updateFormData({ documentation: editorRef.current.innerHTML })
-    
-    // Save the selection after input
-    saveSelection()
-  }
-
-  // Insert code block at current selection
-  const insertCodeBlock = (code) => {
-    if (!editorRef.current || !code) return
-    
-    // Focus editor and restore selection
-    editorRef.current.focus()
-    restoreSelection()
-    
-    const codeHtml = `
-      <pre class="code-block language-${codeLanguage} bg-muted p-4 rounded-md my-4 overflow-x-auto">
-        <code>${code}</code>
-      </pre>
-    `
-    
-    // Insert the HTML
-    const selection = window.getSelection()
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0)
-      
-      // Create a temporary element to hold the HTML
-      const tempDiv = document.createElement('div')
-      tempDiv.innerHTML = codeHtml.trim()
-      const codeElement = tempDiv.firstChild
-      
-      // Insert the element
-      range.deleteContents()
-      range.insertNode(codeElement)
-      
-      // Move cursor after the code block
-      range.setStartAfter(codeElement)
-      selection.removeAllRanges()
-      selection.addRange(range)
-    }
-    
-    setShowCodeEditor(false)
-    
-    // Update form data
-    updateFormData({ documentation: editorRef.current.innerHTML })
-    
-    // Save the selection
-    saveSelection()
-  }
-
-  // Insert link at current selection
-  const insertLink = () => {
-    // Focus editor and restore selection
-    editorRef.current.focus()
-    restoreSelection()
-    
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
-    
-    const range = selection.getRangeAt(0)
-    const selectedText = range.toString()
-    
-    const url = prompt("Enter URL:", "https://")
-    const text = prompt("Enter link text:", selectedText || "Link text")
-    
-    if (url && text) {
-      // Create link element
-      const linkElement = document.createElement('a')
-      linkElement.href = url
-      linkElement.target = "_blank"
-      linkElement.rel = "noopener noreferrer"
-      linkElement.className = "text-primary underline hover:no-underline"
-      linkElement.textContent = text
-      
-      // Insert the link
-      range.deleteContents()
-      range.insertNode(linkElement)
-      
-      // Move cursor after the link
-      range.setStartAfter(linkElement)
-      selection.removeAllRanges()
-      selection.addRange(range)
-      
-      // Update form data
-      updateFormData({ documentation: editorRef.current.innerHTML })
-      
-      // Save the selection
-      saveSelection()
-    }
-  }
+      endpointsHtml += `
+</div>
+`;
+    });
+    endpointsHtml += "</div>";
+    document.execCommand("insertHTML", false, endpointsHtml);
+    editorRef.current.focus();
+  };
 
   return (
-    <div className="space-y-2">
-      <div className="border rounded-md">
-        {/* Editor Mode Toggle */}
-        <div className="flex justify-end p-2 bg-muted/30 border-b">
-          <Button variant="outline" size="sm" onClick={() => setPreviewMode(!previewMode)}>
-            {previewMode ? "Edit" : "Preview"}
+    <div className="space-y-4">
+      {/* Documentation Header */}
+      <div className="space-y-2">
+        <Label htmlFor="documentation">API Documentation</Label>
+        <p className="text-sm text-muted-foreground">
+          Provide comprehensive documentation for your API. Include descriptions, examples, and usage instructions.
+        </p>
+      </div>
+
+      {/* Editor Toolbar */}
+      <Card className="p-1 border">
+        <div className="bg-muted p-2 flex flex-wrap gap-1 border-b">
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("bold")}>
+            <Bold className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("italic")}>
+            <Italic className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const url = prompt("Enter link URL:");
+              if (url) execCommand("createLink", url);
+            }}
+          >
+            <Link className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("insertUnorderedList")}>
+            <List className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("insertOrderedList")}>
+            <ListOrdered className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<h2>")}>
+            <Heading1 className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<h3>")}>
+            <Heading2 className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertCodeBlock}>
+            <Code className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<blockquote>")}>
+            <Quote className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const url = prompt("Enter image URL:");
+              if (url) execCommand("insertImage", url);
+            }}
+          >
+            <Image className="h-4 w-4" />
+          </Button>
+          <div className="h-4 border-r mx-1"></div>
+          <Button type="button" variant="ghost" size="sm" onClick={insertRequestExample}>
+            Request Example
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertResponseExample}>
+            Response Example
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertDivider}>
+            Divider
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertEndpointDocs}>
+            Insert Endpoints
           </Button>
         </div>
 
-        {/* Rich Text Editor Toolbar - Only visible in edit mode */}
-        {!previewMode && (
-          <div className="flex flex-wrap items-center gap-1 p-2 border-b bg-muted/50">
-            {/* Text Formatting */}
-            <div className="flex items-center gap-1 mr-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("strong")}
-                title="Bold"
-              >
-                <Bold className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("em")}
-                title="Italic"
-              >
-                <Italic className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("u")}
-                title="Underline"
-              >
-                <Underline className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="w-px h-6 bg-border mx-1"></div>
-
-            {/* Headings */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 gap-1 px-2">
-                  <Heading1 className="h-4 w-4" />
-                  <span>Heading</span>
-                  <ChevronDown className="h-3 w-3 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-0">
-                <div className="grid gap-1 p-1">
-                  <Button
-                    variant="ghost"
-                    className="justify-start font-bricolage text-xl"
-                    onClick={() => insertHeading(1)}
-                  >
-                    Heading 1
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="justify-start font-bricolage text-lg"
-                    onClick={() => insertHeading(2)}
-                  >
-                    Heading 2
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="justify-start font-bricolage text-base"
-                    onClick={() => insertHeading(3)}
-                  >
-                    Heading 3
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="justify-start font-bricolage text-sm"
-                    onClick={() => insertHeading(4)}
-                  >
-                    Heading 4
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            <div className="w-px h-6 bg-border mx-1"></div>
-
-            {/* Lists */}
-            <div className="flex items-center gap-1 mr-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("insertUnorderedList")}
-                title="Bullet List"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("insertOrderedList")}
-                title="Numbered List"
-              >
-                <ListOrdered className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="w-px h-6 bg-border mx-1"></div>
-
-            {/* Paragraph Formatting */}
-            <div className="flex items-center gap-1 mr-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("formatBlock", "p")}
-                title="Paragraph"
-              >
-                <Pilcrow className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("formatBlock", "blockquote")}
-                title="Quote"
-              >
-                <Quote className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="w-px h-6 bg-border mx-1"></div>
-
-            {/* Links and Code */}
-            <div className="flex items-center gap-1 mr-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={insertLink}
-                title="Insert Link"
-              >
-                <Link2 className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setShowCodeEditor(true)}
-                title="Insert Code Block"
-              >
-                <FileCode className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  // Focus editor and restore selection
-                  editorRef.current.focus()
-                  restoreSelection()
-                  
-                  const selection = window.getSelection()
-                  if (selection && selection.rangeCount > 0) {
-                    const range = selection.getRangeAt(0)
-                    const selectedText = range.toString() || "code"
-                    
-                    // Create inline code element
-                    const codeElement = document.createElement("code")
-                    codeElement.className = "bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
-                    codeElement.textContent = selectedText
-                    
-                    // Insert the element
-                    range.deleteContents()
-                    range.insertNode(codeElement)
-                    
-                    // Move cursor after the code
-                    range.setStartAfter(codeElement)
-                    selection.removeAllRanges()
-                    selection.addRange(range)
-                    
-                    // Update form data
-                    updateFormData({ documentation: editorRef.current.innerHTML })
-                    
-                    // Save the selection
-                    saveSelection()
-                  }
-                }}
-                title="Inline Code"
-              >
-                <Code className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <div className="w-px h-6 bg-border mx-1"></div>
-
-            {/* Alignment */}
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("justifyLeft")}
-                title="Align Left"
-              >
-                <AlignLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("justifyCenter")}
-                title="Align Center"
-              >
-                <AlignCenter className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => applyFormatting("justifyRight")}
-                title="Align Right"
-              >
-                <AlignRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Code Editor Modal */}
-        <CodeEditorModal
-          isOpen={showCodeEditor}
-          onClose={() => setShowCodeEditor(false)}
-          onInsert={insertCodeBlock}
-          codeSnippet={codeSnippet}
-          setCodeSnippet={setCodeSnippet}
-          codeLanguage={codeLanguage}
-          setCodeLanguage={setCodeLanguage}
-        />
-
-        {/* Rich Text Editor Content Area */}
+        {/* Editor Content */}
         <div
           ref={editorRef}
-          className={`min-h-[300px] p-4 focus:outline-none prose dark:prose-invert max-w-none ${
-            previewMode ? "pointer-events-none" : "editor-content"
-          }`}
-          contentEditable={!previewMode}
-          onInput={handleEditorInputChange}
-          onFocus={saveSelection}
-          onBlur={saveSelection}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === "Backspace" || e.key === "Delete") {
-              // Save selection after these key actions
-              setTimeout(saveSelection, 0)
+          className="min-h-[400px] p-4 prose prose-sm max-w-none focus:outline-none"
+          contentEditable
+          dangerouslySetInnerHTML={{ __html: formData.documentation || "<p>Start documenting your API here...</p>" }}
+          onBlur={() => {
+            if (editorRef.current) {
+              updateFormData({ documentation: editorRef.current.innerHTML });
             }
           }}
-          dir="ltr" // Force left-to-right text direction
         />
+      </Card>
+
+      {/* Documentation Tips */}
+      <div className="text-sm text-muted-foreground">
+        <p className="mb-2">Documentation Tips:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li>Start with an overview of what your API does</li>
+          <li>Explain authentication requirements</li>
+          <li>Document each endpoint with examples</li>
+          <li>Include sample request and response formats</li>
+          <li>Describe error handling and status codes</li>
+        </ul>
       </div>
-      <p className="text-sm text-muted-foreground">
-        Use the toolbar above to format your documentation. You can add headings, lists, links, code blocks, and more.
-      </p>
     </div>
-  )
+  );
 }
 
-export default DocumentationEditor
+export default DocumentationEditor;
