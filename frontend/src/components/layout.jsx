@@ -1,24 +1,24 @@
-"use client";
-import { useState, useEffect } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+// src/components/layout.jsx
+import { memo } from "react";
+import { Outlet } from "react-router-dom";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useUser } from "@/contexts/user-context";
 import {
   SidebarProvider,
   Sidebar,
   SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarSeparator,
   SidebarInset,
   SidebarTrigger,
   SidebarRail,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -32,110 +32,80 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ModeToggle } from "@/components/mode-toggle";
 import {
-  Loader2,
-  Home,
-  Code2,
-  BarChart3,
-  Settings,
-  ShoppingBag,
-  LogOut,
-  User,
   Search,
   Bell,
   HelpCircle,
   BookOpen,
-  Key,
+  LogOut,
+  User,
+  Settings,
+  ShoppingBag,
+  Code2,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import SidebarNavItem from "./sidebar/sidebar-nav-item";
+import LoadingScreen from "./ui/loading-screen";
+import { useNavigation } from "@/hooks/use-navigation";
+import { useNotifications } from "@/hooks/use-notifications";
+import { useAuthToken } from "@/hooks/use-auth-token";
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
+const UserProfileButton = memo(({ user, logout, navigate }) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="ghost" className="w-full flex items-center justify-start gap-2 px-2 h-auto py-2">
+        <Avatar className="h-8 w-8 border">
+          <AvatarImage src={user?.picture} alt={user?.name} />
+          <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
+        </Avatar>
+        <div className="flex flex-col items-start text-sm">
+          <span className="font-medium">{user?.name}</span>
+          <span className="text-xs text-muted-foreground truncate max-w-[120px]">{user?.email}</span>
+        </div>
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuLabel>My Account</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={() => navigate("/profile")}>
+        <User className="mr-2 h-4 w-4" />
+        <span>Profile</span>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={() => logout({ returnTo: window.location.origin })}>
+        <LogOut className="mr-2 h-4 w-4" />
+        <span>Log out</span>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+));
+
+UserProfileButton.displayName = "UserProfileButton";
+
+const PageHeader = memo(({ title, user }) => (
+  <header className="border-b py-3 px-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+    <div className="flex items-center gap-3">
+      <SidebarTrigger className="md:hidden" />
+      <h1 className="text-xl font-bold font-bricolage truncate">{title}</h1>
+    </div>
+    <div className="flex items-center gap-2">
+      <Avatar className="h-8 w-8 border hidden sm:flex">
+        <AvatarImage src={user?.picture} alt={user?.name} />
+        <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
+      </Avatar>
+    </div>
+  </header>
+));
+
+PageHeader.displayName = "PageHeader";
 
 function Layout() {
-  const { isAuthenticated, isLoading, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0();
-  const { user, loading: userLoading, getNotifications } = useUser();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [token, setToken] = useState(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isNotificationsLoading, setIsNotificationsLoading] = useState(true);
-
-  // Get token and store it for API calls
-  useEffect(() => {
-    if (isAuthenticated) {
-      const getToken = async () => {
-        try {
-          const accessToken = await getAccessTokenSilently();
-          setToken(accessToken);
-          localStorage.setItem("auth_token", accessToken);
-        } catch (error) {
-          console.error("Error getting token:", error);
-          toast.error("Authentication Error", {
-            description: "Failed to get authentication token. Please try logging in again.",
-          });
-        }
-      };
-      getToken();
-    }
-  }, [isAuthenticated, getAccessTokenSilently]);
-
-  // Fetch notification count
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      const fetchNotifications = async () => {
-        try {
-          setIsNotificationsLoading(true);
-          const { unreadCount } = await getNotifications(true);
-          setUnreadCount(unreadCount);
-        } catch (error) {
-          console.error("Error fetching notifications:", error);
-        } finally {
-          setIsNotificationsLoading(false);
-        }
-      };
-      fetchNotifications();
-      // Set up interval to check for new notifications
-      const interval = setInterval(fetchNotifications, 60000); // Check every minute
-      return () => clearInterval(interval);
-    }
-  }, [isAuthenticated, user, getNotifications]);
-
-  if (isLoading || userLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen gap-6">
-        <div className="text-center space-y-3">
-          <h1 className="text-3xl font-bold">API Marketplace</h1>
-          <p className="text-muted-foreground">Please sign in to access the dashboard</p>
-        </div>
-        <Button onClick={() => loginWithRedirect()}>Sign In</Button>
-      </div>
-    );
-  }
-
-  const mainMenuItems = [
-    { name: "Dashboard", path: "/dashboard", icon: Home },
-    { name: "My APIs", path: "/dashboard/apis", icon: Code2 },
-    { name: "Analytics", path: "/dashboard/analytics", icon: BarChart3 },
-    { name: "Marketplace", path: "/dashboard/marketplace", icon: ShoppingBag },
-    { name: "API Keys", path: "/dashboard/keys", icon: Key },
-  ];
-
-  // Helper function to check if a path is active
-  const isPathActive = (path) => {
-    if (path === "/dashboard" && location.pathname === "/dashboard") {
-      return true;
-    }
-    return location.pathname.startsWith(path) && path !== "/dashboard";
-  };
+  const { logout } = useAuth0();
+  const { user } = useUser();
+  const { mainMenuItems, isPathActive, getCurrentPageTitle, navigate } = useNavigation();
+  const { unreadCount, isLoading: isNotificationsLoading } = useNotifications();
+  const { token } = useAuthToken();
+  const currentPageTitle = getCurrentPageTitle();
 
   return (
     <SidebarProvider>
@@ -159,14 +129,13 @@ function Layout() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {mainMenuItems.map((item) => (
-                    <SidebarMenuItem key={item.path}>
-                      <SidebarMenuButton asChild isActive={isPathActive(item.path)} className="transition-colors">
-                        <button onClick={() => navigate(item.path)} className="flex items-center w-full">
-                          <item.icon className="h-4 w-4 mr-2" />
-                          <span>{item.name}</span>
-                        </button>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                    <SidebarNavItem
+                      key={item.path}
+                      icon={item.icon}
+                      name={item.name}
+                      path={item.path}
+                      isActive={isPathActive(item.path)}
+                    />
                   ))}
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -181,7 +150,7 @@ function Layout() {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild className="transition-colors">
-                      <button onClick={() => navigate("/dashboard/purchased")} className="flex items-center w-full">
+                      <button onClick={() => navigate("/purchased")} className="flex items-center w-full">
                         <span className="flex h-4 w-4 items-center justify-center text-xs mr-2">🛒</span>
                         <span>View All Purchased APIs</span>
                       </button>
@@ -197,7 +166,7 @@ function Layout() {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild className="transition-colors">
-                      <button onClick={() => navigate("/dashboard/docs")} className="flex items-center w-full">
+                      <button className="flex items-center w-full">
                         <BookOpen className="h-4 w-4 mr-2" />
                         <span>Documentation</span>
                       </button>
@@ -205,7 +174,7 @@ function Layout() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild className="transition-colors">
-                      <button onClick={() => navigate("/dashboard/help")} className="flex items-center w-full">
+                      <button className="flex items-center w-full">
                         <HelpCircle className="h-4 w-4 mr-2" />
                         <span>Help Center</span>
                       </button>
@@ -216,39 +185,9 @@ function Layout() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter className="border-t p-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="w-full flex items-center justify-start gap-2 px-2 h-auto py-2">
-                  <Avatar className="h-8 w-8 border">
-                    <AvatarImage src={user?.picture} alt={user?.name} />
-                    <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col items-start text-sm">
-                    <span className="font-medium">{user?.name}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[120px]">{user?.email}</span>
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/dashboard/profile")}>
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Profile</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/dashboard/settings")}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => logout({ returnTo: window.location.origin })}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <UserProfileButton user={user} logout={logout} navigate={navigate} />
             <div className="mt-3 flex justify-between items-center">
-              <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/dashboard/notifications")}>
+              <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-4 w-4" />
                 {!isNotificationsLoading && unreadCount > 0 && (
                   <Badge
@@ -259,7 +198,7 @@ function Layout() {
                   </Badge>
                 )}
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/settings")}>
+              <Button variant="ghost" size="icon">
                 <Settings className="h-4 w-4" />
               </Button>
               <ModeToggle />
@@ -268,21 +207,8 @@ function Layout() {
           <SidebarRail />
         </Sidebar>
         <SidebarInset className="w-full h-full flex flex-col">
-          <header className="border-b py-3 px-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
-            <div className="flex items-center gap-3">
-              <SidebarTrigger className="md:hidden" />
-              <h1 className="text-xl font-bold font-bricolage truncate">
-                {mainMenuItems.find((item) => isPathActive(item.path))?.name || "Dashboard"}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8 border hidden sm:flex">
-                <AvatarImage src={user?.picture} alt={user?.name} />
-                <AvatarFallback>{user?.name?.charAt(0) || "U"}</AvatarFallback>
-              </Avatar>
-            </div>
-          </header>
-          <main className="p-4 md:p-6 w-full h-full">
+          <PageHeader title={currentPageTitle} user={user} />
+          <main className="p-4 md:p-6 w-full h-full overflow-y-auto">
             <Outlet />
           </main>
         </SidebarInset>

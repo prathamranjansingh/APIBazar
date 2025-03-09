@@ -1,446 +1,471 @@
-// src/pages/ApiDetail.jsx
-"use client"
-import { useState, useEffect, useMemo } from "react"
-import { useParams, useNavigate } from "react-router-dom"
-import { useAuthenticatedApi } from "../hooks/useAuthenticatedApi"
-import { useAuth0 } from "@auth0/auth0-react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-         AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { Separator } from "@/components/ui/separator"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { toast } from "sonner"
-import { EditEndpointDialog } from "../components/api-detail/edit-endpoint-dialog"
-import { EditApiDialog } from "../components/api-detail/edit-api-dialog"
-import { ApiOverview } from "../components/api-detail/api-overview"
-import { ApiDocumentation } from "../components/api-detail/api-documentation"
-import { ApiEndpoints } from "../components/api-detail/api-endpoints"
-import { ApiSubscription } from "../components/api-detail/api-subscription"
-import { ApiAnalytics } from "../components/api-detail/api-analytics"
-import { Eye, Edit, Trash, Plus, PlusCircle, BarChart, Key, ShieldAlert, AlertCircle, BookOpen, Code } from "lucide-react"
+import { useState, useEffect, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
+import { useUser } from "@/contexts/user-context";
+import { fetchApiDetails, updateApi, deleteApi } from "@/lib/api-service";
+import { updateEndpoint, deleteEndpoint, createEndpoint } from "@/lib/endpoint-service";
+import { purchaseApi } from "@/lib/purchase-service";
+// UI Components
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+// Page-specific components
+import ApiPreview from "@/components/api/api-preview";
+import ApiEditForm from "@/components/api/api-edit-form";
+import EndpointsList from "@/components/api/endpoints-list";
+import EndpointForm from "@/components/api/endpoint-form";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
+import PageHeader from "@/components/ui/page-header";
 
-/**
- * API Detail Page
- * Provides both a preview view for consumers and a management view for owners
- */
 function ApiDetail() {
-  const { id: apiId } = useParams()
-  const navigate = useNavigate()
-  const { get, post, put, delete: deleteRequest } = useAuthenticatedApi()
-  const { user } = useAuth0()
-
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { getAccessTokenSilently } = useAuth0();
+  const { user } = useUser();
   // State management
-  const [api, setApi] = useState(null)
-  const [endpoints, setEndpoints] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [isOwner, setIsOwner] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [managementMode, setManagementMode] = useState(false)
-  const [activeTab, setActiveTab] = useState("overview")
+  const [api, setApi] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedEndpoint, setSelectedEndpoint] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEndpointDialog, setShowEndpointDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Dialog states
-  const [editEndpoint, setEditEndpoint] = useState(null)
-  const [showEndpointDialog, setShowEndpointDialog] = useState(false)
-  const [showApiEditDialog, setShowApiEditDialog] = useState(false)
-  const [endpointToDelete, setEndpointToDelete] = useState(null)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  /**
-   * Fetch API details from the backend
-   */
-  const fetchApiDetails = async () => {
-    try {
-      setLoading(true)
-      const response = await get(`/api/apis/${apiId}`)
-      setApi(response)
-
-      // Set isOwner flag if the current user is the API owner
-      if (user && response.owner && user.sub === response.owner.auth0Id) {
-        setIsOwner(true)
-      }
-
-      // Organize endpoints
-      if (response.endpoints) {
-        setEndpoints(response.endpoints)
-      }
-    } catch (error) {
-      console.error("Error fetching API details:", error)
-      toast.error("Error", {
-        description: "Failed to load API details. Please try again.",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Derived state
+  const isOwner = useMemo(() =>
+    api?.ownerId === user?.id,
+    [api?.ownerId, user?.id]
+  );
+  const hasPurchased = useMemo(() =>
+    api?.purchasedBy?.some(purchase => purchase.userId === user?.id),
+    [api?.purchasedBy, user?.id]
+  );
 
   // Initial data loading
   useEffect(() => {
-    fetchApiDetails()
-  }, [apiId])
-
-  /**
-   * Handle API updating
-   */
-  const handleUpdateApi = async (updatedData) => {
-    try {
-      const response = await put(`/api/apis/${apiId}`, updatedData, { requireAuth: true })
-      setApi({ ...api, ...response })
-      toast.success("API Updated", {
-        description: "API details have been successfully updated.",
-      })
-      setShowApiEditDialog(false)
-    } catch (error) {
-      console.error("Error updating API:", error)
-      toast.error("Update Failed", {
-        description: error.response?.data?.error || "Failed to update API details.",
-      })
+    async function loadApiDetails() {
+      setIsLoading(true);
+      try {
+        const token = await getAccessTokenSilently();
+        const data = await fetchApiDetails(id, token);
+        setApi(data);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to load API details:", err);
+        setError("Failed to load API details. Please try again.");
+        toast.error("Error", { description: "Failed to load API details" });
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }
-
-  /**
-   * Handle endpoint creation
-   */
-  const handleCreateEndpoint = async (endpointData) => {
-    try {
-      const response = await post(`/api/apis/${apiId}/endpoints`, endpointData, { requireAuth: true })
-      setEndpoints([...endpoints, response])
-      toast.success("Endpoint Created", {
-        description: "New endpoint has been successfully added.",
-      })
-      setShowEndpointDialog(false)
-      setEditEndpoint(null)
-    } catch (error) {
-      console.error("Error creating endpoint:", error)
-      toast.error("Creation Failed", {
-        description: error.response?.data?.error || "Failed to create endpoint.",
-      })
+    if (id) {
+      loadApiDetails();
     }
-  }
+  }, [id, getAccessTokenSilently]);
 
-  /**
-   * Handle endpoint updating
-   */
-  const handleUpdateEndpoint = async (endpointData) => {
-    if (!editEndpoint) return
+  // API update handler
+  const handleApiUpdate = async (updatedData) => {
+    setIsSubmitting(true);
     try {
-      const response = await put(
-        `/api/apis/${apiId}/endpoints/${editEndpoint.id}`,
-        endpointData,
-        { requireAuth: true }
-      )
-      setEndpoints(endpoints.map(endpoint =>
-        endpoint.id === editEndpoint.id ? response : endpoint
-      ))
-      toast.success("Endpoint Updated", {
-        description: "Endpoint has been successfully updated.",
-      })
-      setShowEndpointDialog(false)
-      setEditEndpoint(null)
-    } catch (error) {
-      console.error("Error updating endpoint:", error)
-      toast.error("Update Failed", {
-        description: error.response?.data?.error || "Failed to update endpoint.",
-      })
-    }
-  }
-
-  /**
-   * Handle endpoint deletion
-   */
-  const handleDeleteEndpoint = async () => {
-    if (!endpointToDelete) return
-    try {
-      setIsDeleting(true)
-      await deleteRequest(`/api/apis/${apiId}/endpoints/${endpointToDelete.id}`, { requireAuth: true })
-      setEndpoints(endpoints.filter(endpoint => endpoint.id !== endpointToDelete.id))
-      toast.success("Endpoint Deleted", {
-        description: "Endpoint has been successfully deleted.",
-      })
-    } catch (error) {
-      console.error("Error deleting endpoint:", error)
-      toast.error("Deletion Failed", {
-        description: error.response?.data?.error || "Failed to delete endpoint.",
-      })
+      const token = await getAccessTokenSilently();
+      const updated = await updateApi(id, updatedData, token);
+      setApi(updated);
+      setEditMode(false);
+      toast.success("Success", { description: "API updated successfully" });
+    } catch (err) {
+      console.error("Failed to update API:", err);
+      toast.error("Error", { description: err.message || "Failed to update API" });
     } finally {
-      setIsDeleting(false)
-      setEndpointToDelete(null)
-      setShowDeleteDialog(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  /**
-   * Handle API key generation
-   */
-  const handleGenerateApiKey = async () => {
+  // API delete handler
+  const handleApiDelete = async () => {
+    setIsSubmitting(true);
     try {
-      const response = await post(`/api/keys/apis/${apiId}`, {
-        name: "Generated from dashboard"
-      }, { requireAuth: true })
-      toast.success("API Key Generated", {
-        description: `Your new API key is: ${response.key}`,
-      })
-    } catch (error) {
-      console.error("Error generating API key:", error)
-      toast.error("Generation Failed", {
-        description: error.response?.data?.error || "Failed to generate API key.",
-      })
+      const token = await getAccessTokenSilently();
+      await deleteApi(id, token);
+      toast.success("Success", { description: "API deleted successfully" });
+      navigate("/apis");
+    } catch (err) {
+      console.error("Failed to delete API:", err);
+      toast.error("Error", { description: "Failed to delete API" });
+    } finally {
+      setIsSubmitting(false);
+      setShowDeleteDialog(false);
     }
-  }
+  };
 
-  /**
-   * Handle API purchase
-   */
-  const handlePurchaseApi = async () => {
+  // Endpoint handlers
+  const handleEndpointUpdate = async (endpointData) => {
+    setIsSubmitting(true);
     try {
-      await post(`/api/apis/${apiId}/purchase`, {}, { requireAuth: true })
-      toast.success("API Purchased", {
-        description: "You have successfully purchased access to this API.",
-      })
-      // Refresh API data to update UI
-      fetchApiDetails()
-    } catch (error) {
-      console.error("Error purchasing API:", error)
-      toast.error("Purchase Failed", {
-        description: error.response?.data?.error || "Failed to purchase API.",
-      })
+      const token = await getAccessTokenSilently();
+      if (selectedEndpoint) {
+        // Update existing endpoint
+        const updated = await updateEndpoint(
+          id,
+          selectedEndpoint.id,
+          endpointData,
+          token
+        );
+        // Update API state with the updated endpoint
+        setApi(prev => ({
+          ...prev,
+          endpoints: prev.endpoints.map(ep =>
+            ep.id === updated.id ? updated : ep
+          )
+        }));
+        toast.success("Success", { description: "Endpoint updated successfully" });
+      } else {
+        // Create new endpoint
+        const newEndpoint = await createEndpoint(id, endpointData, token);
+        // Add the new endpoint to API state
+        setApi(prev => ({
+          ...prev,
+          endpoints: [...prev.endpoints, newEndpoint]
+        }));
+        toast.success("Success", { description: "Endpoint created successfully" });
+      }
+      setSelectedEndpoint(null);
+    } catch (err) {
+      console.error("Failed to save endpoint:", err);
+      toast.error("Error", {
+        description: err.message || "Failed to save endpoint"
+      });
+    } finally {
+      setIsSubmitting(false);
+      setShowEndpointDialog(false);
     }
+  };
+
+  const handleEndpointDelete = async (endpointId) => {
+    try {
+      const token = await getAccessTokenSilently();
+      await deleteEndpoint(id, endpointId, token);
+      // Remove the deleted endpoint from state
+      setApi(prev => ({
+        ...prev,
+        endpoints: prev.endpoints.filter(ep => ep.id !== endpointId)
+      }));
+      toast.success("Success", { description: "Endpoint deleted successfully" });
+    } catch (err) {
+      console.error("Failed to delete endpoint:", err);
+      toast.error("Error", { description: "Failed to delete endpoint" });
+    }
+  };
+
+  // Purchase handler
+  const handlePurchase = async () => {
+    setIsSubmitting(true);
+    try {
+      const token = await getAccessTokenSilently();
+      await purchaseApi(id, token);
+      // Update local state to reflect purchase
+      setApi(prev => ({
+        ...prev,
+        purchasedBy: [...(prev.purchasedBy || []), { userId: user.id }]
+      }));
+      toast.success("Success", { description: "API purchased successfully" });
+    } catch (err) {
+      console.error("Failed to purchase API:", err);
+      toast.error("Error", { description: "Failed to purchase API" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Loading state
+  if (isLoading) {
+    return <ApiDetailSkeleton />;
   }
 
-  // Check if user has purchased this API
-  const hasPurchased = useMemo(() => {
-    if (!api || !api.purchasedBy || !user) return false
-    return api.purchasedBy.some(purchase => purchase.userId === user.sub)
-  }, [api, user])
-
-  if (loading) {
-    return <ApiDetailSkeleton />
-  }
-
-  if (!api) {
+  // Error state
+  if (error) {
     return (
-      <div className="flex flex-col items-center justify-center p-12">
-        <AlertCircle className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-bold mb-2">API Not Found</h2>
-        <p className="text-muted-foreground mb-6">The API you're looking for doesn't exist or has been removed.</p>
-        <Button onClick={() => navigate("/apis")}>Return to API Listing</Button>
+      <div className="flex flex-col items-center justify-center p-8 gap-4">
+        <h2 className="text-2xl font-bold text-red-500">Error Loading API</h2>
+        <p className="text-muted-foreground">{error}</p>
+        <Button onClick={() => navigate("/apis")}>Back to APIs</Button>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-8">
-      {/* Header section with API details and management toggle */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-bold">{api.name}</h1>
-            {api.pricingModel === "FREE" ? (
-              <Badge variant="outline" className="bg-green-100 text-green-800">Free</Badge>
-            ) : (
-              <Badge variant="outline" className="bg-blue-100 text-blue-800">
-                Paid (${api.price?.toFixed(2)})
-              </Badge>
-            )}
-            <Badge variant="secondary">{api.category}</Badge>
-          </div>
-          <p className="text-muted-foreground mt-1">
-            {api.owner?.name ? `Created by ${api.owner.name}` : ''}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {isOwner && (
-            <Button
-              variant={managementMode ? "default" : "outline"}
-              onClick={() => setManagementMode(!managementMode)}
-            >
-              {managementMode ? (
-                <>
-                  <Eye className="mr-2 h-4 w-4" />
-                  View as User
-                </>
+    <div className="space-y-6">
+      <PageHeader
+        title={editMode ? "Edit API" : api.name}
+        description={editMode ? "Modify your API details" : api.description}
+        actions={
+          isOwner && (
+            <>
+              {editMode ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditMode(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    form="api-edit-form"
+                    disabled={isSubmitting}
+                  >
+                    Save Changes
+                  </Button>
+                </div>
               ) : (
-                <>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Manage API
-                </>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    Delete API
+                  </Button>
+                  <Button onClick={() => setEditMode(true)}>
+                    Edit API
+                  </Button>
+                </div>
               )}
-            </Button>
+            </>
+          )
+        }
+      />
+      {/* Main content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main content area */}
+        <div className="lg:col-span-2 space-y-6">
+          {editMode ? (
+            /* Edit Mode */
+            <ApiEditForm
+              api={api}
+              onSubmit={handleApiUpdate}
+              disabled={isSubmitting}
+            />
+          ) : (
+            /* Preview Mode */
+            <>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{api.name}</CardTitle>
+                      <CardDescription className="mt-2">{api.description}</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={api.status === 'ACTIVE' ? 'success' : 'secondary'}>
+                        {api.status}
+                      </Badge>
+                      <Badge variant={api.pricingModel === 'FREE' ? 'outline' : 'default'}>
+                        {api.pricingModel === 'FREE' ? 'Free' : `$${api.price?.toFixed(2)}`}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
+                    <TabsList className="mb-4">
+                      <TabsTrigger value="overview">Overview</TabsTrigger>
+                      <TabsTrigger value="endpoints">Endpoints</TabsTrigger>
+                      <TabsTrigger value="documentation">Documentation</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="overview" className="space-y-4">
+                      <ApiPreview api={api} />
+                    </TabsContent>
+                    <TabsContent value="endpoints">
+                      <EndpointsList
+                        endpoints={api.endpoints || []}
+                        isOwner={isOwner}
+                        onEdit={(endpoint) => {
+                          setSelectedEndpoint(endpoint);
+                          setShowEndpointDialog(true);
+                        }}
+                        onDelete={handleEndpointDelete}
+                      />
+                      {isOwner && (
+                        <div className="mt-4">
+                          <Button
+                            onClick={() => {
+                              setSelectedEndpoint(null);
+                              setShowEndpointDialog(true);
+                            }}
+                          >
+                            Add Endpoint
+                          </Button>
+                        </div>
+                      )}
+                    </TabsContent>
+                    <TabsContent value="documentation">
+                      <div className="prose max-w-none dark:prose-invert">
+                        <div dangerouslySetInnerHTML={{ __html: api.documentation || '<p>No documentation available</p>' }} />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+            </>
           )}
-          {!isOwner && !hasPurchased && api.pricingModel === "PAID" && (
-            <Button onClick={handlePurchaseApi}>
-              Purchase API (${api.price?.toFixed(2)})
-            </Button>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {!editMode && (
+            <Card>
+              <CardHeader>
+                <CardTitle>API Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium">Base URL</p>
+                  <code className="text-sm bg-muted p-1 rounded">
+                    {api.baseUrl}
+                  </code>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Version</p>
+                  <p className="text-sm">{api.version}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Rate Limit</p>
+                  <p className="text-sm">{api.rateLimit} requests per minute</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Created</p>
+                  <p className="text-sm">
+                    {new Date(api.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </CardContent>
+              <CardFooter>
+                {!isOwner && !hasPurchased && api.pricingModel === 'PAID' && (
+                  <Button
+                    className="w-full"
+                    onClick={handlePurchase}
+                    disabled={isSubmitting}
+                  >
+                    Purchase for ${api.price?.toFixed(2)}
+                  </Button>
+                )}
+                {!isOwner && !hasPurchased && api.pricingModel === 'FREE' && (
+                  <Button
+                    className="w-full"
+                    onClick={handlePurchase}
+                    disabled={isSubmitting}
+                  >
+                    Add to My APIs
+                  </Button>
+                )}
+                {hasPurchased && (
+                  <Badge className="w-full flex justify-center py-2" variant="success">
+                    Purchased
+                  </Badge>
+                )}
+              </CardFooter>
+            </Card>
           )}
-          {(isOwner || hasPurchased) && (
-            <Button variant="outline" onClick={handleGenerateApiKey}>
-              <Key className="mr-2 h-4 w-4" />
-              Generate API Key
-            </Button>
+          {isOwner && !editMode && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Owner Actions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    setActiveTab("endpoints");
+                    setSelectedEndpoint(null);
+                    setShowEndpointDialog(true);
+                  }}
+                >
+                  Add New Endpoint
+                </Button>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>
-      <Separator />
-
-      {/* Main content tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-2 md:grid-cols-5 w-full">
-          <TabsTrigger value="overview">
-            <Eye className="h-4 w-4 mr-2" /> Overview
-          </TabsTrigger>
-          <TabsTrigger value="documentation">
-            <BookOpen className="h-4 w-4 mr-2" /> Documentation
-          </TabsTrigger>
-          <TabsTrigger value="endpoints">
-            <Code className="h-4 w-4 mr-2" /> Endpoints
-          </TabsTrigger>
-          <TabsTrigger value="subscription" disabled={!isOwner && !hasPurchased}>
-            <Key className="h-4 w-4 mr-2" /> Access
-          </TabsTrigger>
-          {isOwner && (
-            <TabsTrigger value="analytics">
-              <BarChart className="h-4 w-4 mr-2" /> Analytics
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        {/* Overview tab */}
-        <TabsContent value="overview">
-          <ApiOverview
-            api={api}
-            isOwner={isOwner}
-            managementMode={managementMode}
-            onEdit={() => setShowApiEditDialog(true)}
-          />
-        </TabsContent>
-
-        {/* Documentation tab */}
-        <TabsContent value="documentation">
-          <ApiDocumentation
-            documentation={api.documentation}
-            isOwner={isOwner}
-            managementMode={managementMode}
-            onEdit={() => setShowApiEditDialog(true)}
-          />
-        </TabsContent>
-
-        {/* Endpoints tab */}
-        <TabsContent value="endpoints">
-          <ApiEndpoints
-            endpoints={endpoints}
-            baseUrl={api.baseUrl}
-            isOwner={isOwner}
-            managementMode={managementMode}
-            onEdit={(endpoint) => {
-              setEditEndpoint(endpoint)
-              setShowEndpointDialog(true)
-            }}
-            onDelete={(endpoint) => {
-              setEndpointToDelete(endpoint)
-              setShowDeleteDialog(true)
-            }}
-            onAdd={() => {
-              setEditEndpoint(null)
-              setShowEndpointDialog(true)
-            }}
-          />
-        </TabsContent>
-
-        {/* Subscription/Access tab */}
-        <TabsContent value="subscription">
-          <ApiSubscription
-            api={api}
-            isOwner={isOwner}
-            hasPurchased={hasPurchased}
-            onGenerateKey={handleGenerateApiKey}
-            onPurchase={handlePurchaseApi}
-          />
-        </TabsContent>
-
-        {/* Analytics tab */}
-        {isOwner && (
-          <TabsContent value="analytics">
-            <ApiAnalytics api={api} />
-          </TabsContent>
-        )}
-      </Tabs>
-
-      {/* Edit API Dialog */}
-      {showApiEditDialog && (
-        <EditApiDialog
-          api={api}
-          open={showApiEditDialog}
-          onOpenChange={setShowApiEditDialog}
-          onSubmit={handleUpdateApi}
-        />
-      )}
-
-      {/* Edit/Create Endpoint Dialog */}
+      {/* Dialogs */}
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete API"
+        description="Are you sure you want to delete this API? This action cannot be undone and will remove all endpoints."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={handleApiDelete}
+      />
       {showEndpointDialog && (
-        <EditEndpointDialog
-          endpoint={editEndpoint}
+        <EndpointForm
+          endpoint={selectedEndpoint}
           open={showEndpointDialog}
           onOpenChange={setShowEndpointDialog}
-          onSubmit={editEndpoint ? handleUpdateEndpoint : handleCreateEndpoint}
-          baseUrl={api.baseUrl}
+          onSubmit={handleEndpointUpdate}
         />
       )}
-
-      {/* Delete Endpoint Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Endpoint</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this endpoint? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteEndpoint}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete Endpoint"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
-  )
+  );
 }
 
+// Skeleton loader for better UX
 function ApiDetailSkeleton() {
   return (
-    <div className="container mx-auto py-6 space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex justify-between items-start">
         <div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-10 w-[250px]" />
-            <Skeleton className="h-6 w-[60px] rounded-full" />
-          </div>
-          <Skeleton className="h-5 w-[180px] mt-2" />
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-96 mt-2" />
         </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-10 w-[120px]" />
-          <Skeleton className="h-10 w-[120px]" />
-        </div>
+        <Skeleton className="h-10 w-24" />
       </div>
-      <Skeleton className="h-[1px] w-full" />
-      <div>
-        <Skeleton className="h-10 w-full mb-6" />
-        <div className="grid gap-6">
-          <Skeleton className="h-[200px] w-full" />
-          <Skeleton className="h-[300px] w-full" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-full mt-2" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-10 w-24" />
+                  ))}
+                </div>
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        <div>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i}>
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-full mt-1" />
+                </div>
+              ))}
+            </CardContent>
+            <CardFooter>
+              <Skeleton className="h-10 w-full" />
+            </CardFooter>
+          </Card>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default ApiDetail
+export default ApiDetail;
