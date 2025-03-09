@@ -1,62 +1,144 @@
-import { Routes, Route, Navigate } from "react-router-dom";
-import { useContext } from "react";
-import Home from "./pages/Home";
-import { Toaster } from "@/components/ui/sonner";
-import { ThemeProvider } from "@/components/theme-provider";
-import { ApiProvider } from "./contexts/api-context";
-import { UserProvider, UserContext } from "./contexts/user-context";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom"
+import { useEffect, lazy, Suspense } from "react"
+import { Toaster } from "@/components/ui/sonner"
+import { ThemeProvider } from "@/components/theme-provider"
+import { UserProvider, useUser } from "./contexts/user-context"
+import { AuthenticationProvider } from "./contexts/auth-context"
+import { useAuth0 } from "@auth0/auth0-react"
+import Layout from "./components/layout"
+import Loading from "./components/ui/loading"
 
-import Layout from "./components/layout";
-import Dashboard from "./pages/dashboard";
-import ApisList from "./pages/apis-list";
-import CreateApi from "./pages/create-api";
-import ApiDetail from "./pages/api-detail";
-import Analytics from "./pages/analytics";
+// Lazy load pages for better performance
+const Home = lazy(() => import("./pages/Home"))
+const Dashboard = lazy(() => import("./pages/dashboard"))
+const ApisList = lazy(() => import("./pages/apis-list"))
+const CreateApi = lazy(() => import("./pages/create-api"))
+const ApiDetail = lazy(() => import("./pages/api-detail"))
+const Analytics = lazy(() => import("./pages/analytics"))
+// const MarketPlace = lazy(() => import("./pages/marketplace"))
+// const Profile = lazy(() => import("./pages/profile"))
 
 function ProtectedRoute({ children }) {
-  const { user, loading } = useContext(UserContext);
-  
-  console.log("🔹 ProtectedRoute - User:", user);
-  console.log("🔹 ProtectedRoute - Loading:", loading);
+  const { user, loading } = useUser()
+  const { isAuthenticated, loginWithRedirect } = useAuth0()
+  const location = useLocation()
 
-  if (loading) return <div className="simple-spinner"><span></span></div>;
+  useEffect(() => {
+    // If not loading and not authenticated, redirect to login
+    if (!loading && !isAuthenticated) {
+      loginWithRedirect({
+        appState: { returnTo: location.pathname },
+      })
+    }
+  }, [loading, isAuthenticated, loginWithRedirect, location])
 
-  if (!user) {
-    console.log("🚨 Redirecting to home");
-    return <Navigate to="/" replace />;
+  if (loading) {
+    return <Loading />
   }
 
-  return children;
+  return isAuthenticated ? children : null
 }
 
-
-
+/**
+ * Main App component
+ * Sets up routing and global providers
+ */
 function App() {
   return (
     <div className="relative flex min-h-screen flex-col">
       <ThemeProvider defaultTheme="system" storageKey="api-marketplace-theme">
-        <UserProvider>
-          <ApiProvider>
+        <AuthenticationProvider>
+          <UserProvider>
             <main className="flex-grow">
-              
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/lay" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                  <Route index element={<Dashboard />} />
-                  <Route path="apis" element={<ApisList />} />
-                  <Route path="apis/create" element={<CreateApi />} />
-                  <Route path="apis/:id" element={<ApiDetail />} />
-                  <Route path="analytics" element={<Analytics />} />
-                </Route>
-              </Routes>
-              
+              <Suspense fallback={<Loading />}>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/" element={<Home />} />
+                  {/* <Route path="/marketplace" element={<MarketPlace />} /> */}
+
+                  {/* Protected routes */}
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <Dashboard />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/apis"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <ApisList />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/apis/create"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <CreateApi />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/apis/:id"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <ApiDetail />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/apis/:id/edit"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <CreateApi isEditing />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/analytics"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <Analytics />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  {/* <Route
+                    path="/profile"
+                    element={
+                      <ProtectedRoute>
+                        <Layout>
+                          <Profile />
+                        </Layout>
+                      </ProtectedRoute>
+                    }
+                  /> */}
+
+                  {/* Fallback route */}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
             </main>
-            <Toaster />
-          </ApiProvider>
-        </UserProvider>
+            <Toaster position="top-right" />
+          </UserProvider>
+        </AuthenticationProvider>
       </ThemeProvider>
     </div>
-  );
+  )
 }
 
-export default App;
+export default App

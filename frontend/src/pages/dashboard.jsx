@@ -146,7 +146,7 @@ function Dashboard() {
     <div className="space-y-6 w-full font-bricolage h-full">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Welcome back, {user?.name}</h2>
-        <Button onClick={() => navigate("/lay/create-api")}>
+        <Button onClick={() => navigate("/dashboard/create-api")}>
           <Plus className="mr-2 h-4 w-4" /> Create API
         </Button>
       </div>
@@ -239,7 +239,7 @@ function Dashboard() {
                     </div>
                   </CardContent>
                   <CardFooter className="bg-muted/50 p-3">
-                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/lay/apis/${api.id}`)}>
+                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/dashboard/apis/${api.id}`)}>
                       View Details
                     </Button>
                   </CardFooter>
@@ -252,7 +252,7 @@ function Dashboard() {
                   <CardDescription>Create your first API to get started</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                  <Button onClick={() => navigate("/lay/create-api")}>
+                  <Button onClick={() => navigate("/dashboard/create-api")}>
                     <Plus className="mr-2 h-4 w-4" /> Create API
                   </Button>
                 </CardFooter>
@@ -331,7 +331,7 @@ function Dashboard() {
                     </div>
                   </CardContent>
                   <CardFooter className="bg-muted/50 p-3">
-                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/lay/apis/${api.id}`)}>
+                    <Button variant="secondary" className="w-full" onClick={() => navigate(`/dashboard/apis/${api.id}`)}>
                       View API
                     </Button>
                   </CardFooter>
@@ -344,7 +344,7 @@ function Dashboard() {
                   <CardDescription>You haven't purchased any APIs yet</CardDescription>
                 </CardHeader>
                 <CardFooter>
-                  <Button variant="outline" onClick={() => navigate("/lay/marketplace")}>
+                  <Button variant="outline" onClick={() => navigate("/dashboard/marketplace")}>
                     Browse Marketplace
                   </Button>
                 </CardFooter>

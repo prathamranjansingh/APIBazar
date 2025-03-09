@@ -122,19 +122,19 @@ function Layout() {
   }
 
   const mainMenuItems = [
-    { name: "Dashboard", path: "/lay", icon: Home },
-    { name: "My APIs", path: "/lay/apis", icon: Code2 },
-    { name: "Analytics", path: "/lay/analytics", icon: BarChart3 },
-    { name: "Marketplace", path: "/lay/marketplace", icon: ShoppingBag },
-    { name: "API Keys", path: "/lay/keys", icon: Key },
+    { name: "Dashboard", path: "/dashboard", icon: Home },
+    { name: "My APIs", path: "/dashboard/apis", icon: Code2 },
+    { name: "Analytics", path: "/dashboard/analytics", icon: BarChart3 },
+    { name: "Marketplace", path: "/dashboard/marketplace", icon: ShoppingBag },
+    { name: "API Keys", path: "/dashboard/keys", icon: Key },
   ];
 
   // Helper function to check if a path is active
   const isPathActive = (path) => {
-    if (path === "/lay" && location.pathname === "/lay") {
+    if (path === "/dashboard" && location.pathname === "/dashboard") {
       return true;
     }
-    return location.pathname.startsWith(path) && path !== "/lay";
+    return location.pathname.startsWith(path) && path !== "/dashboard";
   };
 
   return (
@@ -181,7 +181,7 @@ function Layout() {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild className="transition-colors">
-                      <button onClick={() => navigate("/lay/purchased")} className="flex items-center w-full">
+                      <button onClick={() => navigate("/dashboard/purchased")} className="flex items-center w-full">
                         <span className="flex h-4 w-4 items-center justify-center text-xs mr-2">🛒</span>
                         <span>View All Purchased APIs</span>
                       </button>
@@ -197,7 +197,7 @@ function Layout() {
                 <SidebarMenu>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild className="transition-colors">
-                      <button onClick={() => navigate("/lay/docs")} className="flex items-center w-full">
+                      <button onClick={() => navigate("/dashboard/docs")} className="flex items-center w-full">
                         <BookOpen className="h-4 w-4 mr-2" />
                         <span>Documentation</span>
                       </button>
@@ -205,7 +205,7 @@ function Layout() {
                   </SidebarMenuItem>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild className="transition-colors">
-                      <button onClick={() => navigate("/lay/help")} className="flex items-center w-full">
+                      <button onClick={() => navigate("/dashboard/help")} className="flex items-center w-full">
                         <HelpCircle className="h-4 w-4 mr-2" />
                         <span>Help Center</span>
                       </button>
@@ -232,11 +232,11 @@ function Layout() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/lay/profile")}>
+                <DropdownMenuItem onClick={() => navigate("/dashboard/profile")}>
                   <User className="mr-2 h-4 w-4" />
                   <span>Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/lay/settings")}>
+                <DropdownMenuItem onClick={() => navigate("/dashboard/settings")}>
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
@@ -248,7 +248,7 @@ function Layout() {
               </DropdownMenuContent>
             </DropdownMenu>
             <div className="mt-3 flex justify-between items-center">
-              <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/lay/notifications")}>
+              <Button variant="ghost" size="icon" className="relative" onClick={() => navigate("/dashboard/notifications")}>
                 <Bell className="h-4 w-4" />
                 {!isNotificationsLoading && unreadCount > 0 && (
                   <Badge
@@ -259,7 +259,7 @@ function Layout() {
                   </Badge>
                 )}
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => navigate("/lay/settings")}>
+              <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/settings")}>
                 <Settings className="h-4 w-4" />
               </Button>
               <ModeToggle />
