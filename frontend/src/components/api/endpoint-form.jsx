@@ -30,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 
 const httpMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
@@ -49,7 +48,7 @@ const endpointSchema = z.object({
   cacheDuration: z.number().min(0).optional().nullable(),
 });
 
-const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
+const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit, isSubmitting }) => {
   const [activeTab, setActiveTab] = useState("basic");
   const [isAuthRequired, setIsAuthRequired] = useState(endpoint?.authRequired ?? true);
   const [isCachingEnabled, setIsCachingEnabled] = useState(endpoint?.cachingEnabled ?? false);
@@ -70,11 +69,12 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
   const form = useForm({
     resolver: zodResolver(endpointSchema),
     defaultValues,
+    mode: "onSubmit", // Ensure form only submits on explicit submit
   });
 
+  // Reset form when dialog opens with different endpoint
   useEffect(() => {
     if (open) {
-      // Reset form when dialog opens
       form.reset(defaultValues);
       setIsAuthRequired(defaultValues.authRequired);
       setIsCachingEnabled(defaultValues.cachingEnabled);
@@ -86,7 +86,12 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      // Only allow closing if not submitting
+      if (!isSubmitting || !isOpen) {
+        onOpenChange(isOpen);
+      }
+    }}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -106,6 +111,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                 <TabsTrigger value="advanced">Advanced</TabsTrigger>
                 <TabsTrigger value="schema">Schema</TabsTrigger>
               </TabsList>
+
               <TabsContent value="basic" className="space-y-4">
                 <div className="grid grid-cols-4 gap-4">
                   <FormField
@@ -117,6 +123,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                         <Select
                           onValueChange={field.onChange}
                           defaultValue={field.value}
+                          disabled={isSubmitting}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -142,7 +149,11 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                       <FormItem className="col-span-3">
                         <FormLabel>Path</FormLabel>
                         <FormControl>
-                          <Input {...field} placeholder="/users/:id" />
+                          <Input
+                            {...field}
+                            placeholder="/users/:id"
+                            disabled={isSubmitting}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -160,6 +171,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                           {...field}
                           placeholder="Describe what this endpoint does"
                           rows={3}
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                       <FormMessage />
@@ -185,6 +197,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                               field.onChange(checked);
                               setIsAuthRequired(checked);
                             }}
+                            disabled={isSubmitting}
                           />
                         </FormControl>
                       </FormItem>
@@ -205,6 +218,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                           <Switch
                             checked={field.value}
                             onCheckedChange={field.onChange}
+                            disabled={isSubmitting}
                           />
                         </FormControl>
                       </FormItem>
@@ -212,6 +226,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                   />
                 </div>
               </TabsContent>
+
               <TabsContent value="advanced" className="space-y-4">
                 <FormField
                   control={form.control}
@@ -226,6 +241,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                           onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
                           value={field.value || ""}
                           placeholder="Use API default"
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                       <FormDescription>
@@ -253,6 +269,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                             field.onChange(checked);
                             setIsCachingEnabled(checked);
                           }}
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                     </FormItem>
@@ -272,6 +289,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                             onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
                             value={field.value || ""}
                             placeholder="60"
+                            disabled={isSubmitting}
                           />
                         </FormControl>
                         <FormMessage />
@@ -280,6 +298,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                   />
                 )}
               </TabsContent>
+
               <TabsContent value="schema" className="space-y-4">
                 <FormField
                   control={form.control}
@@ -293,6 +312,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                           placeholder='{ "type": "object", "properties": { ... } }'
                           rows={5}
                           className="font-mono text-sm"
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                       <FormDescription>
@@ -314,6 +334,7 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                           placeholder='{ "type": "object", "properties": { ... } }'
                           rows={5}
                           className="font-mono text-sm"
+                          disabled={isSubmitting}
                         />
                       </FormControl>
                       <FormDescription>
@@ -325,12 +346,25 @@ const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit }) => {
                 />
               </TabsContent>
             </Tabs>
+
             <DialogFooter className="mt-6">
-              <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
                 Cancel
               </Button>
-              <Button type="submit">
-                {endpoint ? "Update Endpoint" : "Create Endpoint"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <span className="animate-spin mr-2">↻</span>
+                    {endpoint ? "Updating..." : "Creating..."}
+                  </>
+                ) : (
+                  endpoint ? "Update Endpoint" : "Create Endpoint"
+                )}
               </Button>
             </DialogFooter>
           </form>
