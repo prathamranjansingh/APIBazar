@@ -1,14 +1,13 @@
-import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -29,349 +28,255 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
+
+// Endpoint schema
+const endpointSchema = z.object({
+  name: z.string().min(1).max(100).trim(),
+  method: z.string().trim(),
+  path: z.string().min(1).trim(),
+  description: z.string().optional(),
+  headers: z.any().optional().nullable(),
+  requestBody: z.any().optional().nullable(),
+  responseSchema: z.any().optional().nullable(),
+  rateLimit: z.number().int().positive().optional().nullable(),
+});
 
 const httpMethods = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
-// Form validation schema
-const endpointSchema = z.object({
-  path: z.string().min(1, "Path is required").startsWith("/", "Path must start with /"),
-  method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]),
-  description: z.string().optional(),
-  rateLimit: z.number().min(1, "Rate limit must be at least 1").optional().nullable(),
-  authRequired: z.boolean().default(true),
-  deprecated: z.boolean().default(false),
-  requestBodySchema: z.string().optional(),
-  responseBodySchema: z.string().optional(),
-  cachingEnabled: z.boolean().default(false),
-  cacheDuration: z.number().min(0).optional().nullable(),
-});
-
-const EndpointForm = ({ endpoint, open, onOpenChange, onSubmit, isSubmitting }) => {
-  const [activeTab, setActiveTab] = useState("basic");
-  const [isAuthRequired, setIsAuthRequired] = useState(endpoint?.authRequired ?? true);
-  const [isCachingEnabled, setIsCachingEnabled] = useState(endpoint?.cachingEnabled ?? false);
-
+const EndpointDialog = ({ open, onOpenChange, endpoint, onSubmit, isSubmitting }) => {
   const defaultValues = {
-    path: endpoint?.path || "/",
+    name: endpoint?.name || "",
     method: endpoint?.method || "GET",
+    path: endpoint?.path || "/",
     description: endpoint?.description || "",
+    headers: endpoint?.headers || null,
+    requestBody: endpoint?.requestBody || null,
+    responseSchema: endpoint?.responseSchema || null,
     rateLimit: endpoint?.rateLimit || null,
-    authRequired: endpoint?.authRequired ?? true,
-    deprecated: endpoint?.deprecated ?? false,
-    requestBodySchema: endpoint?.requestBodySchema || "",
-    responseBodySchema: endpoint?.responseBodySchema || "",
-    cachingEnabled: endpoint?.cachingEnabled ?? false,
-    cacheDuration: endpoint?.cacheDuration || null,
   };
 
   const form = useForm({
     resolver: zodResolver(endpointSchema),
     defaultValues,
-    mode: "onSubmit", // Ensure form only submits on explicit submit
+    mode: "onSubmit",
   });
 
-  // Reset form when dialog opens with different endpoint
-  useEffect(() => {
-    if (open) {
-      form.reset(defaultValues);
-      setIsAuthRequired(defaultValues.authRequired);
-      setIsCachingEnabled(defaultValues.cachingEnabled);
-    }
-  }, [open, form, defaultValues]);
-
-  const handleSubmit = (data) => {
-    onSubmit(data);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      // Only allow closing if not submitting
-      if (!isSubmitting || !isOpen) {
-        onOpenChange(isOpen);
-      }
-    }}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={(value) => !isSubmitting && onOpenChange(value)}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {endpoint ? "Edit Endpoint" : "Add New Endpoint"}
-          </DialogTitle>
+          <DialogTitle>{endpoint ? "Edit Endpoint" : "Add Endpoint"}</DialogTitle>
           <DialogDescription>
             {endpoint
-              ? "Modify the details of this endpoint."
-              : "Create a new endpoint for your API."}
+              ? "Update the details of this endpoint"
+              : "Create a new endpoint for your API"
+            }
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)}>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="pt-2">
-              <TabsList className="mb-4">
-                <TabsTrigger value="basic">Basic</TabsTrigger>
-                <TabsTrigger value="advanced">Advanced</TabsTrigger>
-                <TabsTrigger value="schema">Schema</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="basic" className="space-y-4">
-                <div className="grid grid-cols-4 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="method"
-                    render={({ field }) => (
-                      <FormItem className="col-span-1">
-                        <FormLabel>Method</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          disabled={isSubmitting}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Method" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {httpMethods.map((method) => (
-                              <SelectItem key={method} value={method}>
-                                {method}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="path"
-                    render={({ field }) => (
-                      <FormItem className="col-span-3">
-                        <FormLabel>Path</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="/users/:id"
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
+          <form id="endpoint-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endpoint Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="Get User" disabled={isSubmitting} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid grid-cols-4 gap-4">
+              <FormField
+                control={form.control}
+                name="method"
+                render={({ field }) => (
+                  <FormItem className="col-span-1">
+                    <FormLabel>Method</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                      disabled={isSubmitting}
+                    >
                       <FormControl>
-                        <Textarea
-                          {...field}
-                          placeholder="Describe what this endpoint does"
-                          rows={3}
-                          disabled={isSubmitting}
-                        />
+                        <SelectTrigger>
+                          <SelectValue placeholder="Method" />
+                        </SelectTrigger>
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="authRequired"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between">
-                        <div>
-                          <FormLabel>Requires Authentication</FormLabel>
-                          <FormDescription>
-                            Endpoint requires valid API key
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={(checked) => {
-                              field.onChange(checked);
-                              setIsAuthRequired(checked);
-                            }}
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="deprecated"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between">
-                        <div>
-                          <FormLabel>Deprecated</FormLabel>
-                          <FormDescription>
-                            Mark as deprecated
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </TabsContent>
-
-              <TabsContent value="advanced" className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="rateLimit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Rate Limit (per minute)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="1"
-                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
-                          value={field.value || ""}
-                          placeholder="Use API default"
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Override default API rate limit for this endpoint
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="cachingEnabled"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between">
-                      <div>
-                        <FormLabel>Enable Caching</FormLabel>
-                        <FormDescription>
-                          Cache responses to improve performance
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={(checked) => {
-                            field.onChange(checked);
-                            setIsCachingEnabled(checked);
-                          }}
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                {isCachingEnabled && (
-                  <FormField
-                    control={form.control}
-                    name="cacheDuration"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Cache Duration (seconds)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min="0"
-                            onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
-                            value={field.value || ""}
-                            placeholder="60"
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      <SelectContent>
+                        {httpMethods.map((method) => (
+                          <SelectItem key={method} value={method}>
+                            {method}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </TabsContent>
-
-              <TabsContent value="schema" className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="requestBodySchema"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Request Body Schema (JSON)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          placeholder='{ "type": "object", "properties": { ... } }'
-                          rows={5}
-                          className="font-mono text-sm"
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        JSON Schema format describing the request payload
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="responseBodySchema"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Response Body Schema (JSON)</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          {...field}
-                          placeholder='{ "type": "object", "properties": { ... } }'
-                          rows={5}
-                          className="font-mono text-sm"
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        JSON Schema format describing the response payload
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </TabsContent>
-            </Tabs>
-
-            <DialogFooter className="mt-6">
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => onOpenChange(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <span className="animate-spin mr-2">↻</span>
-                    {endpoint ? "Updating..." : "Creating..."}
-                  </>
-                ) : (
-                  endpoint ? "Update Endpoint" : "Create Endpoint"
+              />
+              <FormField
+                control={form.control}
+                name="path"
+                render={({ field }) => (
+                  <FormItem className="col-span-3">
+                    <FormLabel>Path</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="/users/:id" disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </Button>
-            </DialogFooter>
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      placeholder="Describe what this endpoint does"
+                      rows={3}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="rateLimit"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Rate Limit (per minute)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={field.value || ""}
+                      onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : null)}
+                      placeholder="Use API default"
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormDescription>Override the API's default rate limit for this endpoint</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="headers"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Headers (JSON)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      value={field.value ? JSON.stringify(field.value, null, 2) : ""}
+                      onChange={(e) => {
+                        try {
+                          const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+                          field.onChange(parsed);
+                        } catch (err) {
+                          console.log("Invalid JSON - will validate on submit");
+                        }
+                      }}
+                      placeholder='{ "Content-Type": "application/json" }'
+                      rows={3}
+                      className="font-mono text-sm"
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormDescription>Required headers for this endpoint (JSON format)</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="requestBody"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Request Body Schema (JSON)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      value={field.value ? JSON.stringify(field.value, null, 2) : ""}
+                      onChange={(e) => {
+                        try {
+                          const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+                          field.onChange(parsed);
+                        } catch (err) {
+                          // Allow invalid JSON during typing
+                        }
+                      }}
+                      placeholder='{ "type": "object", "properties": { "name": { "type": "string" } } }'
+                      rows={3}
+                      className="font-mono text-sm"
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormDescription>JSON Schema for request body</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="responseSchema"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Response Schema (JSON)</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      value={field.value ? JSON.stringify(field.value, null, 2) : ""}
+                      onChange={(e) => {
+                        try {
+                          const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+                          field.onChange(parsed);
+                        } catch (err) {
+                          // Allow invalid JSON during typing
+                        }
+                      }}
+                      placeholder='{ "type": "object", "properties": { "id": { "type": "number" } } }'
+                      rows={3}
+                      className="font-mono text-sm"
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormDescription>JSON Schema for response body</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </form>
         </Form>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="endpoint-form"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? (endpoint ? "Updating..." : "Creating...")
+              : (endpoint ? "Update Endpoint" : "Create Endpoint")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 };
 
-export default EndpointForm;
+export default EndpointDialog;
