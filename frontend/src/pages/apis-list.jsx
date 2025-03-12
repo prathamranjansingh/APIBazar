@@ -204,6 +204,7 @@ function ApisList() {
             <DropdownMenuItem onClick={() => setSearchTerm("finance")}>Finance</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setSearchTerm("weather")}>Weather</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setSearchTerm("social")}>Social</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSearchTerm("ai")}>AI</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

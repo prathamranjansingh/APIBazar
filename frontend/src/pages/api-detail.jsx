@@ -26,9 +26,9 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import ApiEditForm from "@/components/api/api-edit-form";
-import EndpointDialog from "@/components/api/endpoint-form";
-import DocumentationEditorDialog from "@/components/api/documentation-editor";
+import ApiEditForm from "@/components/api-detail/api-edit-form";
+import EndpointDialog from "@/components/api-detail/endpoint-form";
+import DocumentationEditorDialog from "@/components/api-detail/documentation-editor";
 
 const ApiDetail = () => {
   const { id } = useParams();

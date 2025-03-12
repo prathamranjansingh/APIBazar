@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { UserProvider } from "./contexts/user-context";
 import ProtectedRoute from "./components/auth/protected-route";
 import LoadingScreen from "./components/ui/loading-screen";
+import PurchasePage from "./pages/purchase";
 
 // Lazy-loaded components for code splitting
 const Layout = lazy(() => import("./components/layout"));
@@ -18,7 +19,7 @@ const Analytics = lazy(() => import("./pages/analytics"));
 // const Profile = lazy(() => import("./pages/profile"));
 // const Marketplace = lazy(() => import("./pages/marketplace"));
 // const Keys = lazy(() => import("./pages/keys"));
-// const Purchased = lazy(() => import("./pages/purchased"));
+const Purchased = lazy(() => import("./pages/purchase"));
 // const NotFound = lazy(() => import("./pages/not-found"));
 
 function App() {
@@ -39,7 +40,7 @@ function App() {
                 <Route path="/analytics" element={<Analytics />} />
                 {/* <Route path="/marketplace" element={<Marketplace />} /> */}
                 {/* <Route path="/keys" element={<Keys />} /> */}
-                {/* <Route path="/purchased" element={<Purchased />} /> */}
+                <Route path="/purchased" element={<PurchasePage />} />
                 {/* <Route path="/profile" element={<Profile />} /> */}
               </Route>
               {/* Fallback routes */}
