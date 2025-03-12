@@ -1,93 +1,114 @@
-import { useAuth0 } from '@auth0/auth0-react';
+import axios from 'axios';
 
-const API_URL =  import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
 
+// Create an axios instance
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-// Create a wrapper hook to use the Auth0 context
-export const useApiService = () => {
-  const { getAccessTokenSilently } = useAuth0();
-
-  // Helper function to get the auth token
-  const getAuthToken = async () => {
-    try {
-      const token = await getAccessTokenSilently();
-      return token;
-    } catch (error) {
-      console.error('Error getting token', error);
-      return null;
-    }
-  };
-
-  // API request helper with authentication
-  const apiRequest = async (endpoint, options = {}) => {
-    try {
-      const token = await getAuthToken();
-      const headers = {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+// Create the API service with authentication
+const createApiService = (getToken) => {
+  // Add auth token to requests
+  apiClient.interceptors.request.use(
+    async (config) => {
+      try {
+        const token = await getToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error('Error getting auth token:', error);
+        // Continue with request without token
       }
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        ...options,
-        headers,
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'API request failed');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
+      return config;
+    },
+    (error) => {
+      return Promise.reject(error);
     }
-  };
+  );
 
-  // Return the API service methods
   return {
-    // API endpoints
-    getAllApis: () => apiRequest('/apis'),
-    getApiById: (id) => apiRequest(`/apis/${id}`),
-    createApi: (data) => apiRequest('/apis', { method: 'POST', body: JSON.stringify(data) }),
-    updateApi: (id, data) => apiRequest(`/apis/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    deleteApi: (id) => apiRequest(`/apis/${id}`, { method: 'DELETE' }),
+    // Get all purchased APIs for the current user
+    getPurchasedApis: async () => {
+      try {
+        const response = await apiClient.get('/apis/user/purchased');
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch purchased APIs:', error);
+        throw error;
+      }
+    },
 
-    // User APIs
-    getMyApis: () => apiRequest('/apis/user/me'),
-    getPurchasedApis: () => apiRequest('/apis/user/purchased'),
+    // Get a specific API by ID
+    getApiById: async (id) => {
+      try {
+        const response = await apiClient.get(`/${id}`);
+        return response.data;
+      } catch (error) {
+        console.error(`Failed to fetch API with ID ${id}:`, error);
+        throw error;
+      }
+    },
 
-    // API Keys
-    getMyApiKeys: () => apiRequest('/keys/me'),
-    createApiKey: (apiId, data) =>
-      apiRequest(`/keys/apis/${apiId}`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    revokeApiKey: (keyId) => apiRequest(`/keys/${keyId}`, { method: 'DELETE' }),
+    // Purchase an API
+    purchaseApi: async (apiId) => {
+      try {
+        const response = await apiClient.post(`/${apiId}/purchase`);
+        return response.data;
+      } catch (error) {
+        console.error(`Failed to purchase API with ID ${apiId}:`, error);
+        throw error;
+      }
+    },
 
-    // Purchase
-    purchaseApi: (apiId) => apiRequest(`/apis/${apiId}/purchase`, { method: 'POST' }),
+    // Get all API keys for the current user
+    getUserApiKeys: async () => {
+      try {
+        const response = await apiClient.get('/keys/me');
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch API keys:', error);
+        throw error;
+      }
+    },
 
-    // Webhooks
-    getApiWebhooks: (apiId) => apiRequest(`/webhooks/apis/${apiId}`),
-    createWebhook: (apiId, data) =>
-      apiRequest(`/webhooks/apis/${apiId}`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }),
-    updateWebhook: (apiId, webhookId, data) =>
-      apiRequest(`/webhooks/apis/${apiId}/${webhookId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      }),
-    deleteWebhook: (apiId, webhookId) =>
-      apiRequest(`/webhooks/apis/${apiId}/${webhookId}`, {
-        method: 'DELETE',
-      }),
+    // Create a new API key
+    createApiKey: async (data) => {
+      try {
+        const response = await apiClient.post('/apikeys', data);
+        return response.data;
+      } catch (error) {
+        console.error('Failed to create API key:', error);
+        throw error;
+      }
+    },
 
-    // Analytics
-    getApiAnalytics: (apiId, period = '30days') =>
-      apiRequest(`/analytics/${apiId}?period=${period}`),
+    // Revoke an API key
+    revokeApiKey: async (keyId) => {
+      try {
+        const response = await apiClient.patch(`/apikeys/${keyId}/revoke`);
+        return response.data;
+      } catch (error) {
+        console.error(`Failed to revoke API key with ID ${keyId}:`, error);
+        throw error;
+      }
+    },
+
+    // Get analytics for an API
+    getApiAnalytics: async (apiId) => {
+      try {
+        const response = await apiClient.get(`/${apiId}/analytics`);
+        return response.data;
+      } catch (error) {
+        console.error(`Failed to fetch analytics for API with ID ${apiId}:`, error);
+        throw error;
+      }
+    },
   };
 };
+
+export { createApiService };

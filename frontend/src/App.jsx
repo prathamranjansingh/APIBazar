@@ -1,4 +1,3 @@
-// src/App.jsx
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
@@ -7,7 +6,7 @@ import { UserProvider } from "./contexts/user-context";
 import ProtectedRoute from "./components/auth/protected-route";
 import LoadingScreen from "./components/ui/loading-screen";
 import PurchasePage from "./pages/purchase";
-
+import { ApiServiceProvider } from "./contexts/ApiServiceContext";
 // Lazy-loaded components for code splitting
 const Layout = lazy(() => import("./components/layout"));
 const Home = lazy(() => import("./pages/Home"));
@@ -16,17 +15,19 @@ const ApisList = lazy(() => import("./pages/apis-list"));
 const CreateApi = lazy(() => import("./pages/create-api"));
 const ApiDetail = lazy(() => import("./pages/api-detail"));
 const Analytics = lazy(() => import("./pages/analytics"));
-// const Profile = lazy(() => import("./pages/profile"));
-// const Marketplace = lazy(() => import("./pages/marketplace"));
-// const Keys = lazy(() => import("./pages/keys"));
+// Marketplace pages
+const ApiMarketplace = lazy(() => import("./pages/marketplace/api-marketplace"));
+const ApiMarketDetails = lazy(() => import("./pages/marketplace/api-market-details"));
+const ApiReviews = lazy(() => import("./pages/marketplace/api-reviews"));
+const CreateReview = lazy(() => import("./pages/marketplace/create-review"));
 const Purchased = lazy(() => import("./pages/purchase"));
 // const NotFound = lazy(() => import("./pages/not-found"));
-
 function App() {
   return (
     <div className="relative flex min-h-screen flex-col">
       <ThemeProvider defaultTheme="system" storageKey="api-marketplace-theme">
         <UserProvider>
+        <ApiServiceProvider>
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               {/* Public route */}
@@ -38,21 +39,24 @@ function App() {
                 <Route path="/apis/create" element={<CreateApi />} />
                 <Route path="/apis/:id" element={<ApiDetail />} />
                 <Route path="/analytics" element={<Analytics />} />
-                {/* <Route path="/marketplace" element={<Marketplace />} /> */}
-                {/* <Route path="/keys" element={<Keys />} /> */}
                 <Route path="/purchased" element={<PurchasePage />} />
-                {/* <Route path="/profile" element={<Profile />} /> */}
-              </Route>
+                {/* Protected marketplace routes */}
+                <Route path="/reviews/create/:apiId" element={<CreateReview />} />
+                     {/* Public marketplace routes */}
+              <Route path="/marketplace" element={<ApiMarketplace />} />
+              <Route path="/marketplace/:apiId" element={<ApiMarketDetails />} />
+              <Route path="/marketplace/:apiId/reviews" element={<ApiReviews />} />
+                </Route>
               {/* Fallback routes */}
               {/* <Route path="/404" element={<NotFound />} /> */}
               <Route path="*" element={<Navigate to="/404" replace />} />
             </Routes>
           </Suspense>
           <Toaster />
+          </ApiServiceProvider>
         </UserProvider>
       </ThemeProvider>
     </div>
   );
 }
-
 export default App;
