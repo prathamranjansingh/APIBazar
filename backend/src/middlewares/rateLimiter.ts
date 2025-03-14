@@ -1,114 +1,76 @@
-// src/middleware/rateLimiter.ts
-import { Request, Response, NextFunction } from "express";
-import { RateLimitOptions } from "../utils/types";
-import { PrismaClient } from "@prisma/client";
-import { logger } from "../utils/logger";
-import { createNotification } from "../services/notificationService";
+import { Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import { redisClient } from '../config/redis';
+import {logger} from '../utils/logger';
 
-const prisma = new PrismaClient();
+// Rate limiter options interface
+interface RateLimiterOptions {
+  windowMs?: number;
+  max?: number;
+  message?: string;
+  standardHeaders?: boolean;
+  legacyHeaders?: boolean;
+}
 
-// In-memory store for global rate limiting (should use Redis in production)
-const rateLimitStore: Record<string, { count: number; resetTime: number }> = {};
-
-/**
- * Global rate limiter middleware
- * Limits requests from a single IP within a specified time window.
- */
-export const globalRateLimiter = (options: RateLimitOptions) => {
-  const { maxRequests, windowMs, message = "Too many requests, please try again later" } = options;
-
-  return (req: Request, res: Response, next: NextFunction) => {
-    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
-    const key = `global:${ip}`;
-    const now = Date.now();
-
-    // Initialize or reset rate limit for the IP
-    if (!rateLimitStore[key] || rateLimitStore[key].resetTime < now) {
-      rateLimitStore[key] = {
-        count: 1,
-        resetTime: now + windowMs
-      };
-      next();
-      return;
-    }
-
-    // Check if request limit is exceeded
-    if (rateLimitStore[key].count >= maxRequests) {
-      res.status(429).json({ error: message });
-      return;
-    }
-
-    // Increment request count and continue
-    rateLimitStore[key].count++;
-    next();
+// Enhanced Request interface to include user property
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    [key: string]: any;
   };
-};
+}
 
-/**
- * API Key-based rate limiter middleware
- * Enforces per-hour request limits based on API keys.
- */
-export const apiKeyRateLimiter = async (req: Request, res: Response, next: NextFunction) => {
-  if (!req.apiKey) {
-    return next(); // No API key, skip rate limiting
-  }
+// Create rate limiter with Redis store
+const createRateLimiter = (options: RateLimiterOptions = {}) => {
+  const defaultOptions: RateLimiterOptions = {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    message: 'Too many requests, please try again later.',
+  };
+
+  const limiterOptions = { ...defaultOptions, ...options };
 
   try {
-    const apiKeyId = req.apiKey.apiId;
-    const apiKey = req.apiKey;
-    const rateLimit = apiKey.rateLimit ?? 1000;;
-    const endpoint = req.path;
-    const ip = req.ip || req.headers["x-forwarded-for"] || "unknown";
-
-    // Calculate start of the current hour for rate limit window
-    const now = new Date();
-    const hourStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
-
-    // Count the number of requests made with this API key in the current hour
-    const usageCount = await prisma.rateLimitLog.count({
-      where: {
-        apiKeyId,
-        timestamp: { gte: hourStart }
-      }
+    return rateLimit({
+      ...limiterOptions,
+      store: new RedisStore({
+        // @ts-expect-error - Known issue with type definitions
+        sendCommand: (...args: any[]) => redisClient.call(...args),
+        prefix: 'ratelimit:',
+      }),
+      keyGenerator: (req: AuthenticatedRequest) => {
+        // Use user ID if authenticated, otherwise IP
+        return req.user ? `user:${req.user.id}` : req.ip || '';
+      },
+      handler: (req: Request, res: Response) => {
+        const authReq = req as AuthenticatedRequest;
+        logger.warn(`Rate limit exceeded for ${authReq.ip || authReq.user?.id}`);
+        return res.status(429).json({
+          status: 'error',
+          message: limiterOptions.message,
+        });
+      },
     });
-
-    // If the limit is exceeded, return a 429 response
-    if (usageCount >= rateLimit) {
-      logger.warn(`Rate limit exceeded for API key: ${apiKeyId}, endpoint: ${endpoint}`);
-      
-    if (!req.consumerId || !req.apiId) {
-        return res.status(400).json({ error: "Missing consumerId or apiId" });
-      }
-      // Notify the user about the rate limit breach
-      await createNotification({
-        userId: req.consumerId,
-        type: "RATE_LIMIT_REACHED",
-        title: "Rate Limit Reached",
-        message: "You've reached the rate limit for the API. The limit will reset in the next hour.",
-        data: { apiId: req.apiId }
-      });
-
-      return res.status(429).json({
-        error: "Rate limit exceeded",
-        limit: rateLimit,
-        current: usageCount,
-        resetsAt: new Date(hourStart.getTime() + 3600000).toISOString()
-      });
-    }
-
-    // Log the request for future rate limit checks
-    await prisma.rateLimitLog.create({
-      data: {
-        apiKeyId,
-        timestamp: now,
-        endpoint,
-        ip: ip.toString().substring(0, 50) // Limit string length for database storage
-      }
-    });
-
-    next();
   } catch (error) {
-    logger.error("Error in API key rate limiter:", error);
-    next(); // Continue even if rate limiting fails
+    logger.error(`Redis rate limiter error: ${error instanceof Error ? error.message : String(error)}`);
+    // Fallback to memory-based rate limiting if Redis is unavailable
+    return rateLimit(limiterOptions);
   }
 };
+
+// Specific rate limiters for different routes
+const apiRequestLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30, // 30 requests per minute
+  message: 'Too many API calls, please try again later.',
+});
+
+const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per 15 minutes
+  message: 'Too many login attempts, please try again later.',
+});
+
+export { apiRequestLimiter, authLimiter };
