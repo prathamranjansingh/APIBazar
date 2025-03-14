@@ -5,16 +5,51 @@ import { apiSchema, endpointSchema } from "../../utils/validators";
 import { logger } from "../../utils/logger";
 import { createNotification } from "../../services/notificationService";
 import { triggerWebhooks } from "../../services/webhookService";
-// Removed unused import
+import {
+  cacheData,
+  getCachedData,
+  invalidateCache,
+  invalidateCacheByPattern,
+  incrementApiUsage,
+  isRedisAvailable,
+  CACHE_TTL
+} from "../../config/redis";
+
 const prisma = new PrismaClient();
 
+/**
+ * Generate cache key for API listings with filters and pagination
+ */
+const generateListCacheKey = (query: any): string => {
+  const { category, search, page = 1, limit = 10 } = query;
+  return `apis:list:${category || 'all'}:${search || 'none'}:${page}:${limit}`;
+};
+
+/**
+ * Get all APIs with Redis caching and fallback
+ */
 export const getAllApis = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Parse query parameters
+    // Only attempt to use cache if Redis is available
+    let cachedResult = null;
+    const cacheKey = generateListCacheKey(req.query);
+    if (isRedisAvailable()) {
+      cachedResult = await getCachedData<{
+        data: any[];
+        pagination: any;
+      }>(cacheKey);
+      if (cachedResult) {
+        res.json(cachedResult);
+        return;
+      }
+    }
+
+    // Cache miss or Redis unavailable - fetch from database
     const category = req.query.category as string;
     const search = req.query.search as string;
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+
     // Build filter conditions
     const where: any = {};
     if (category) {
@@ -26,8 +61,10 @@ export const getAllApis = async (req: Request, res: Response): Promise<void> => 
         { description: { contains: search, mode: 'insensitive' } }
       ];
     }
+
     // Calculate pagination
     const skip = (page - 1) * limit;
+
     // Execute query with pagination
     const [apis, totalCount] = await Promise.all([
       prisma.api.findMany({
@@ -61,9 +98,10 @@ export const getAllApis = async (req: Request, res: Response): Promise<void> => 
       }),
       prisma.api.count({ where })
     ]);
+
     // Calculate pagination metadata
     const totalPages = Math.ceil(totalCount / limit);
-    res.json({
+    const result = {
       data: apis,
       pagination: {
         page,
@@ -73,7 +111,18 @@ export const getAllApis = async (req: Request, res: Response): Promise<void> => 
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
       }
-    });
+    };
+
+    // Try to cache the results if Redis is available
+    // This operation is non-blocking - we don't need to wait for it
+    if (isRedisAvailable()) {
+      const ttl = search ? CACHE_TTL.SHORT : CACHE_TTL.MEDIUM;
+      cacheData(cacheKey, result, ttl).catch(err => {
+        logger.error(`Failed to cache API list results: ${err}`);
+      });
+    }
+
+    res.json(result);
   } catch (error) {
     logger.error("Error fetching APIs:", error);
     res.status(500).json({ error: "Failed to fetch APIs" });
@@ -81,41 +130,45 @@ export const getAllApis = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * Create a new API
+ * Create a new API and invalidate related caches
  */
 export const createApi = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const validated = apiSchema.safeParse(req.body);
   if (!validated.success) {
     res.status(400).json({ error: validated.error.format() });
     return;
   }
+
   const { pricingModel, price, rateLimit = 100, ...rest } = validated.data;
-  
+
   // Validate price for PAID models
   if (pricingModel === "PAID" && (price === null || price === undefined)) {
     res.status(400).json({ error: "Price is required for PAID models." });
     return;
   }
-  
+
   // Added validation for rate limit
   if (rateLimit < 1) {
     res.status(400).json({ error: "Rate limit must be at least 1." });
     return;
   }
-  
+
   try {
     // Get the user ID from Auth0 ID
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
     // Create the API
     const api = await prisma.api.create({
       data: {
@@ -139,6 +192,18 @@ export const createApi = async (req: AuthenticatedRequest, res: Response): Promi
         }
       }
     });
+
+    // Attempt to invalidate caches if Redis is available
+    // Use Promise.all for parallel execution but don't wait for completion
+    if (isRedisAvailable()) {
+      Promise.all([
+        invalidateCacheByPattern('apis:list:*'),
+        invalidateCache(`user:${user.id}:apis`)
+      ]).catch(err => {
+        logger.error(`Failed to invalidate caches after API creation: ${err}`);
+      });
+    }
+
     logger.info(`API created: ${api.id} by user ${user.id}`);
     res.status(201).json(api);
   } catch (error) {
@@ -148,11 +213,23 @@ export const createApi = async (req: AuthenticatedRequest, res: Response): Promi
 };
 
 /**
- * Get API by ID
+ * Get API by ID with Redis caching and fallback
  */
 export const getApiById = async (req: Request, res: Response): Promise<void> => {
   const { id } = req.params;
   try {
+    // Try to get from cache if Redis is available
+    let cachedApi = null;
+    const cacheKey = `api:${id}`;
+    if (isRedisAvailable()) {
+      cachedApi = await getCachedData(cacheKey);
+      if (cachedApi) {
+        res.json(cachedApi);
+        return;
+      }
+    }
+
+    // Cache miss or Redis unavailable - fetch from database
     const api = await prisma.api.findUnique({
       where: { id },
       include: {
@@ -203,10 +280,19 @@ export const getApiById = async (req: Request, res: Response): Promise<void> => 
         }
       }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
+    // Try to cache the API details if Redis is available
+    if (isRedisAvailable()) {
+      cacheData(cacheKey, api, CACHE_TTL.MEDIUM).catch(err => {
+        logger.error(`Failed to cache API details: ${err}`);
+      });
+    }
+
     res.json(api);
   } catch (error) {
     logger.error("Error fetching API:", error);
@@ -215,23 +301,27 @@ export const getApiById = async (req: Request, res: Response): Promise<void> => 
 };
 
 /**
- * Update an API
+ * Update an API and attempt to invalidate related caches
  */
 export const updateApi = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const { id } = req.params;
+
   try {
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
     // Check if user owns this API
     const api = await prisma.api.findUnique({
       where: { id },
@@ -241,38 +331,40 @@ export const updateApi = async (req: AuthenticatedRequest, res: Response): Promi
         }
       }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
     if (api.ownerId !== user.id) {
       res.status(403).json({ error: "You don't have permission to update this API" });
       return;
     }
+
     // Validate request data
     const validated = apiSchema.partial().safeParse(req.body);
     if (!validated.success) {
       res.status(400).json({ error: validated.error.format() });
       return;
     }
+
     const { pricingModel, price, rateLimit, ...rest } = validated.data;
-    // Create update data object
     const updateData: any = { ...rest };
-    
+
     // Added validation for rate limit if it's being updated
     if (rateLimit !== undefined && rateLimit < 1) {
       res.status(400).json({ error: "Rate limit must be at least 1." });
       return;
     }
-    
+
     if (rateLimit !== undefined) {
       updateData.rateLimit = rateLimit;
     }
-    
+
     // Improved pricing model and price validation
     if (pricingModel !== undefined) {
       updateData.pricingModel = pricingModel;
-      
       if (pricingModel === "PAID") {
         // When changing to PAID, ensure price is set
         if (price === undefined && api.pricingModel === "FREE") {
@@ -292,18 +384,45 @@ export const updateApi = async (req: AuthenticatedRequest, res: Response): Promi
       }
       updateData.price = price;
     }
-    
+
     // Update the API
     const updatedApi = await prisma.api.update({
       where: { id },
       data: updateData
     });
 
+    // Attempt to invalidate caches if Redis is available
+    // Don't block the response on cache operations
+    if (isRedisAvailable()) {
+      // Collect all purchaser IDs for cache invalidation
+      const purchaserIds = api.purchasedBy.map(purchase => purchase.userId);
+
+      // Create invalidation tasks
+      const cacheInvalidationTasks = [
+        invalidateCache(`api:${id}`),
+        invalidateCacheByPattern('apis:list:*'),
+        invalidateCache(`user:${user.id}:apis`)
+      ];
+
+      // Add purchaser cache invalidation tasks
+      if (purchaserIds.length > 0) {
+        purchaserIds.forEach(userId => {
+          cacheInvalidationTasks.push(invalidateCache(`user:${userId}:purchased`));
+        });
+      }
+
+      // Execute all cache invalidation tasks in parallel but don't wait
+      Promise.all(cacheInvalidationTasks).catch(err => {
+        logger.error(`Failed to invalidate caches after API update: ${err}`);
+      });
+    }
+
     // Notify users who purchased this API about the update
     if (api.purchasedBy.length > 0) {
       const purchaserIds = api.purchasedBy.map(purchase => purchase.userId);
+
       // Create notifications for each user
-      await Promise.all(
+      Promise.all(
         purchaserIds.map(userId =>
           createNotification({
             userId,
@@ -313,14 +432,20 @@ export const updateApi = async (req: AuthenticatedRequest, res: Response): Promi
             data: { apiId: updatedApi.id }
           })
         )
-      );
+      ).catch(err => {
+        logger.error(`Failed to create notifications for API update: ${err}`);
+      });
+
       // Trigger webhooks for API update event
-      await triggerWebhooks({
+      triggerWebhooks({
         apiId: updatedApi.id,
         event: "API_UPDATED",
         payload: { api: updatedApi }
+      }).catch(err => {
+        logger.error(`Failed to trigger webhooks for API update: ${err}`);
       });
     }
+
     res.json(updatedApi);
   } catch (error) {
     logger.error("Error updating API:", error);
@@ -329,44 +454,79 @@ export const updateApi = async (req: AuthenticatedRequest, res: Response): Promi
 };
 
 /**
- * Delete an API
+ * Delete an API and attempt to invalidate related caches
  */
 export const deleteApi = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const { id } = req.params;
+
   try {
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
-    // Check if user owns this API
+
+    // Check if user owns this API and get purchasers for cache invalidation
     const api = await prisma.api.findUnique({
       where: { id },
-      select: {
-        id: true,
-        name: true,
-        ownerId: true
+      include: {
+        purchasedBy: {
+          select: {
+            userId: true
+          }
+        }
       }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
     if (api.ownerId !== user.id) {
       res.status(403).json({ error: "You don't have permission to delete this API" });
       return;
     }
+
     // Delete the API (cascading will handle related records)
     await prisma.api.delete({
       where: { id }
     });
+
+    // Attempt to invalidate caches if Redis is available
+    if (isRedisAvailable()) {
+      // Collect all purchaser IDs for cache invalidation
+      const purchaserIds = api.purchasedBy.map(purchase => purchase.userId);
+
+      // Create invalidation tasks
+      const cacheInvalidationTasks = [
+        invalidateCache(`api:${id}`),
+        invalidateCacheByPattern('apis:list:*'),
+        invalidateCache(`user:${user.id}:apis`)
+      ];
+
+      // Add purchaser cache invalidation tasks
+      if (purchaserIds.length > 0) {
+        purchaserIds.forEach(userId => {
+          cacheInvalidationTasks.push(invalidateCache(`user:${userId}:purchased`));
+        });
+      }
+
+      // Execute all cache invalidation tasks in parallel but don't block response
+      Promise.all(cacheInvalidationTasks).catch(err => {
+        logger.error(`Failed to invalidate caches after API deletion: ${err}`);
+      });
+    }
+
     res.json({ message: "API deleted successfully" });
   } catch (error) {
     logger.error("Error deleting API:", error);
@@ -375,21 +535,36 @@ export const deleteApi = async (req: AuthenticatedRequest, res: Response): Promi
 };
 
 /**
- * Get APIs created by the current user
+ * Get APIs created by the authenticated user with Redis caching and fallback
  */
 export const getMyApis = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   try {
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
+    // Try to get from cache if Redis is available
+    let cachedApis = null;
+    const cacheKey = `user:${user.id}:apis`;
+    if (isRedisAvailable()) {
+      cachedApis = await getCachedData(cacheKey);
+      if (cachedApis) {
+        res.json(cachedApis);
+        return;
+      }
+    }
+
+    // Cache miss or Redis unavailable - fetch from database
     const apis = await prisma.api.findMany({
       where: { ownerId: user.id },
       include: {
@@ -403,6 +578,14 @@ export const getMyApis = async (req: AuthenticatedRequest, res: Response): Promi
       },
       orderBy: { createdAt: 'desc' }
     });
+
+    // Try to cache the result if Redis is available
+    if (isRedisAvailable()) {
+      cacheData(cacheKey, apis, CACHE_TTL.MEDIUM).catch(err => {
+        logger.error(`Failed to cache user's APIs: ${err}`);
+      });
+    }
+
     res.json(apis);
   } catch (error) {
     logger.error("Error fetching user's APIs:", error);
@@ -411,21 +594,36 @@ export const getMyApis = async (req: AuthenticatedRequest, res: Response): Promi
 };
 
 /**
- * Get APIs purchased by the current user
+ * Get APIs purchased by the current user with Redis caching and fallback
  */
 export const getPurchasedApis = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   try {
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
+    // Try to get from cache if Redis is available
+    let cachedApis = null;
+    const cacheKey = `user:${user.id}:purchased`;
+    if (isRedisAvailable()) {
+      cachedApis = await getCachedData(cacheKey);
+      if (cachedApis) {
+        res.json(cachedApis);
+        return;
+      }
+    }
+
+    // Cache miss or Redis unavailable - fetch from database
     const purchasedApis = await prisma.purchasedAPI.findMany({
       where: { userId: user.id },
       include: {
@@ -443,8 +641,17 @@ export const getPurchasedApis = async (req: AuthenticatedRequest, res: Response)
       },
       orderBy: { createdAt: 'desc' }
     });
+
     // Extract just the APIs from the purchased records
     const apis = purchasedApis.map(purchase => purchase.api);
+
+    // Try to cache the result if Redis is available
+    if (isRedisAvailable()) {
+      cacheData(cacheKey, apis, CACHE_TTL.LONG).catch(err => {
+        logger.error(`Failed to cache purchased APIs: ${err}`);
+      });
+    }
+
     res.json(apis);
   } catch (error) {
     logger.error("Error fetching purchased APIs:", error);
@@ -453,49 +660,61 @@ export const getPurchasedApis = async (req: AuthenticatedRequest, res: Response)
 };
 
 /**
- * Add an endpoint to an API
+ * Add an endpoint to an API and attempt to invalidate API caches
  */
 export const addEndpoint = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const { apiId } = req.params;
+
   try {
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
     // Check if user owns this API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      select: { ownerId: true }
+      select: {
+        ownerId: true,
+        purchasedBy: {
+          select: { userId: true }
+        }
+      }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
     if (api.ownerId !== user.id) {
       res.status(403).json({ error: "You don't have permission to modify this API" });
       return;
     }
+
     // Validate endpoint data
     const validated = endpointSchema.safeParse(req.body);
     if (!validated.success) {
       res.status(400).json({ error: validated.error.format() });
       return;
     }
-    
+
     // Added validation for endpoint rate limit if specified
     if (validated.data.rateLimit !== undefined && validated.data.rateLimit < 1) {
       res.status(400).json({ error: "Endpoint rate limit must be at least 1." });
       return;
     }
-    
+
     // Check for duplicate endpoint path+method
     const existingEndpoint = await prisma.endpoint.findFirst({
       where: {
@@ -504,12 +723,14 @@ export const addEndpoint = async (req: AuthenticatedRequest, res: Response): Pro
         method: validated.data.method
       }
     });
+
     if (existingEndpoint) {
       res.status(400).json({
         error: `Endpoint with method ${validated.data.method} and path ${validated.data.path} already exists`
       });
       return;
     }
+
     // Create the endpoint
     const endpoint = await prisma.endpoint.create({
       data: {
@@ -517,6 +738,27 @@ export const addEndpoint = async (req: AuthenticatedRequest, res: Response): Pro
         apiId
       }
     });
+
+    // Attempt to invalidate related API caches if Redis is available
+    if (isRedisAvailable()) {
+      const cacheInvalidationTasks = [
+        invalidateCache(`api:${apiId}`),
+        invalidateCache(`user:${user.id}:apis`)
+      ];
+
+      // Add purchaser cache invalidation if the API has been purchased
+      if (api.purchasedBy && api.purchasedBy.length > 0) {
+        api.purchasedBy.forEach(purchase => {
+          cacheInvalidationTasks.push(invalidateCache(`user:${purchase.userId}:purchased`));
+        });
+      }
+
+      // Execute all cache invalidation tasks in parallel but don't block response
+      Promise.all(cacheInvalidationTasks).catch(err => {
+        logger.error(`Failed to invalidate caches after endpoint creation: ${err}`);
+      });
+    }
+
     res.status(201).json(endpoint);
   } catch (error) {
     logger.error("Error adding endpoint:", error);
@@ -525,58 +767,73 @@ export const addEndpoint = async (req: AuthenticatedRequest, res: Response): Pro
 };
 
 /**
- * Update an endpoint
+ * Update an endpoint and attempt to invalidate related caches
  */
 export const updateEndpoint = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const { apiId, endpointId } = req.params;
+
   try {
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
     // Check if user owns the API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      select: { ownerId: true }
+      select: {
+        ownerId: true,
+        purchasedBy: {
+          select: { userId: true }
+        }
+      }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
     if (api.ownerId !== user.id) {
       res.status(403).json({ error: "You don't have permission to modify this API" });
       return;
     }
+
     // Check if endpoint exists
     const endpoint = await prisma.endpoint.findUnique({
       where: { id: endpointId }
     });
+
     if (!endpoint || endpoint.apiId !== apiId) {
       res.status(404).json({ error: "Endpoint not found" });
       return;
     }
+
     // Validate endpoint data
     const validated = endpointSchema.partial().safeParse(req.body);
     if (!validated.success) {
       res.status(400).json({ error: validated.error.format() });
       return;
     }
-    
+
     // Added validation for endpoint rate limit if specified
     if (validated.data.rateLimit !== undefined && validated.data.rateLimit < 1) {
       res.status(400).json({ error: "Endpoint rate limit must be at least 1." });
       return;
     }
-    
+
     const { path, method } = validated.data;
+
     // If path or method is being updated, check for conflicts
     if ((path && path !== endpoint.path) || (method && method !== endpoint.method)) {
       const existingEndpoint = await prisma.endpoint.findFirst({
@@ -587,6 +844,7 @@ export const updateEndpoint = async (req: AuthenticatedRequest, res: Response): 
           NOT: { id: endpointId }
         }
       });
+
       if (existingEndpoint) {
         res.status(400).json({
           error: `Another endpoint with method ${method || endpoint.method} and path ${path || endpoint.path} already exists`
@@ -594,17 +852,42 @@ export const updateEndpoint = async (req: AuthenticatedRequest, res: Response): 
         return;
       }
     }
+
     // Update the endpoint
     const updatedEndpoint = await prisma.endpoint.update({
       where: { id: endpointId },
       data: validated.data
     });
-    // Trigger webhooks for endpoint update
-    await triggerWebhooks({
+
+    // Attempt to invalidate related API caches if Redis is available
+    if (isRedisAvailable()) {
+      const cacheInvalidationTasks = [
+        invalidateCache(`api:${apiId}`),
+        invalidateCache(`user:${user.id}:apis`)
+      ];
+
+      // Add purchaser cache invalidation if the API has been purchased
+      if (api.purchasedBy && api.purchasedBy.length > 0) {
+        api.purchasedBy.forEach(purchase => {
+          cacheInvalidationTasks.push(invalidateCache(`user:${purchase.userId}:purchased`));
+        });
+      }
+
+      // Execute all cache invalidation tasks in parallel but don't block response
+      Promise.all(cacheInvalidationTasks).catch(err => {
+        logger.error(`Failed to invalidate caches after endpoint update: ${err}`);
+      });
+    }
+
+    // Trigger webhooks for endpoint update - don't block response
+    triggerWebhooks({
       apiId,
       event: "ENDPOINT_UPDATED",
       payload: { endpoint: updatedEndpoint }
+    }).catch(err => {
+      logger.error(`Failed to trigger webhooks for endpoint update: ${err}`);
     });
+
     res.json(updatedEndpoint);
   } catch (error) {
     logger.error("Error updating endpoint:", error);
@@ -613,48 +896,83 @@ export const updateEndpoint = async (req: AuthenticatedRequest, res: Response): 
 };
 
 /**
- * Delete an endpoint
+ * Delete an endpoint and attempt to invalidate related caches
  */
 export const deleteEndpoint = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const { apiId, endpointId } = req.params;
+
   try {
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
     // Check if user owns the API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      select: { ownerId: true }
+      select: {
+        ownerId: true,
+        purchasedBy: {
+          select: { userId: true }
+        }
+      }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
     if (api.ownerId !== user.id) {
       res.status(403).json({ error: "You don't have permission to modify this API" });
       return;
     }
+
     // Check if endpoint exists
     const endpoint = await prisma.endpoint.findUnique({
       where: { id: endpointId }
     });
+
     if (!endpoint || endpoint.apiId !== apiId) {
       res.status(404).json({ error: "Endpoint not found" });
       return;
     }
+
     // Delete the endpoint
     await prisma.endpoint.delete({
       where: { id: endpointId }
     });
+
+    // Attempt to invalidate related API caches if Redis is available
+    if (isRedisAvailable()) {
+      const cacheInvalidationTasks = [
+        invalidateCache(`api:${apiId}`),
+        invalidateCache(`user:${user.id}:apis`)
+      ];
+
+      // Add purchaser cache invalidation if the API has been purchased
+      if (api.purchasedBy && api.purchasedBy.length > 0) {
+        api.purchasedBy.forEach(purchase => {
+          cacheInvalidationTasks.push(invalidateCache(`user:${purchase.userId}:purchased`));
+        });
+      }
+
+      // Execute all cache invalidation tasks in parallel but don't block response
+      Promise.all(cacheInvalidationTasks).catch(err => {
+        logger.error(`Failed to invalidate caches after endpoint deletion: ${err}`);
+      });
+    }
+
     res.json({ message: "Endpoint deleted successfully" });
   } catch (error) {
     logger.error("Error deleting endpoint:", error);
@@ -663,23 +981,27 @@ export const deleteEndpoint = async (req: AuthenticatedRequest, res: Response): 
 };
 
 /**
- * Purchase an API
+ * Purchase an API and update relevant caches
  */
 export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+
   const { apiId } = req.params;
+
   try {
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub }
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
     // Check if API exists
     const api = await prisma.api.findUnique({
       where: { id: apiId },
@@ -687,10 +1009,12 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
         owner: true
       }
     });
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
+
     // Check if user already purchased this API
     const existingPurchase = await prisma.purchasedAPI.findUnique({
       where: {
@@ -700,16 +1024,18 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
         }
       }
     });
+
     if (existingPurchase) {
       res.status(400).json({ error: "You have already purchased this API" });
       return;
     }
+
     // Can't purchase your own API
     if (api.ownerId === user.id) {
       res.status(400).json({ error: "You cannot purchase your own API" });
       return;
     }
-    
+
     // Generate API key with a more secure method
     const generateApiKey = (): string => {
       const prefix = apiId.substring(0, 8);
@@ -717,9 +1043,9 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
       const random = Math.random().toString(36).substring(2, 15);
       return `${prefix}_${timestamp}_${random}`;
     };
-    
+
     const apiKeyValue = generateApiKey();
-    
+
     // Start transaction for purchase
     const [purchase, transaction, apiKey] = await prisma.$transaction([
       // Record the purchase
@@ -749,10 +1075,19 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
         }
       })
     ]);
-    
-    // Send notifications
-    await Promise.all([
-      // Notify the buyer
+
+    // Invalidate relevant caches if Redis is available
+    if (isRedisAvailable()) {
+      Promise.all([
+        invalidateCache(`user:${user.id}:purchased`),
+        invalidateCache(`api:${apiId}`) // Update purchase count
+      ]).catch(err => {
+        logger.error(`Failed to invalidate caches after API purchase: ${err}`);
+      });
+    }
+
+    // Send notifications in background (don't block response)
+    Promise.all([
       createNotification({
         userId: user.id,
         type: "PURCHASE_CONFIRMED",
@@ -760,7 +1095,6 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
         message: `You have successfully purchased access to ${api.name}`,
         data: { apiId, transactionId: transaction.id }
       }),
-      // Notify the seller
       createNotification({
         userId: api.ownerId,
         type: "API_PURCHASED",
@@ -768,10 +1102,12 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
         message: `Someone has purchased access to your API: ${api.name}`,
         data: { apiId, transactionId: transaction.id }
       })
-    ]);
-    
-    // Trigger webhooks
-    await triggerWebhooks({
+    ]).catch(err => {
+      logger.error(`Failed to create notifications for API purchase: ${err}`);
+    });
+
+    // Trigger webhooks in background
+    triggerWebhooks({
       apiId,
       event: "API_PURCHASED",
       payload: {
@@ -779,8 +1115,10 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
         buyerId: user.id,
         transactionId: transaction.id
       }
+    }).catch(err => {
+      logger.error(`Failed to trigger webhooks for API purchase: ${err}`);
     });
-    
+
     res.status(201).json({
       message: "API purchased successfully",
       purchase,

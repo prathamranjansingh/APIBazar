@@ -1,28 +1,32 @@
+import { Router } from 'express';
+import { checkJwt } from '../middlewares/auth';
+import apiController from '../controllers/api/apiController';
+import { apiLimiter, authLimiter, dynamicApiLimiter } from '../middlewares/rateLimiter';
 
-// src/routes/api.routes.ts
-import { Router } from "express";
-import { checkJwt } from "../middlewares/auth"; 
-import apiController from "../controllers/api/apiController";
-import { globalRateLimiter } from "../middlewares/rateLimiter";
 const router = Router();
-// Public routes
-router.get("/",
-  globalRateLimiter({ maxRequests: 100, windowMs: 60 * 1000 }),
-  apiController.getAllApis
-);
-router.get("/:id", apiController.getApiById);
-// Protected routes
-router.use(checkJwt);
-router.post("/", apiController.createApi);
-router.get("/user/me", apiController.getMyApis);
-router.get("/user/purchased", apiController.getPurchasedApis);
-router.put("/:id", apiController.updateApi);
-router.delete("/:id", apiController.deleteApi);
-// Endpoint routes
-router.post("/:apiId/endpoints", apiController.addEndpoint);
-router.put("/:apiId/endpoints/:endpointId", apiController.updateEndpoint);
-router.delete("/:apiId/endpoints/:endpointId", apiController.deleteEndpoint);
-// Purchase route
-router.post("/:apiId/purchase", apiController.purchaseApi);
-export default router;
 
+// Public routes with appropriate rate limits
+// List APIs - Higher limit as it's commonly accessed
+router.get('/', apiLimiter, apiController.getAllApis);
+
+// Get single API details - Less restricted as it's a specific resource
+router.get('/:id', apiLimiter, apiController.getApiById);
+router.use(checkJwt);
+
+
+router.post('/', authLimiter, apiController.createApi);
+
+router.get('/user/me', apiLimiter, apiController.getMyApis);
+
+router.get('/user/purchased', apiLimiter, apiController.getPurchasedApis);
+
+router.put('/:id', authLimiter, apiController.updateApi);
+router.delete('/:id', authLimiter, apiController.deleteApi);
+
+router.post('/:apiId/endpoints', authLimiter, apiController.addEndpoint);
+router.put('/:apiId/endpoints/:endpointId', authLimiter, apiController.updateEndpoint);
+router.delete('/:apiId/endpoints/:endpointId', authLimiter, apiController.deleteEndpoint);
+
+router.post('/:apiId/purchase', authLimiter, apiController.purchaseApi);
+
+export default router;

@@ -30,6 +30,7 @@
     "morgan": "^1.10.0",
     "prisma": "^6.4.1",
     "rate-limit-redis": "^4.2.0",
+    "rate-limiter-flexible": "^6.1.0",
     "winston": "^3.17.0",
     "zod": "^3.24.2"
   },
