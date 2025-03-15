@@ -18,6 +18,7 @@ const Analytics = lazy(() => import("./pages/analytics"));
 // Marketplace pages
 const ApiMarketplace = lazy(() => import("./pages/marketplace/api-marketplace"));
 const ApiMarketDetails = lazy(() => import("./pages/marketplace/api-market-details"));
+const ApiDetailsTestPage = lazy(() => import("./pages/ApiDetailsTestPage"));
 const ApiReviews = lazy(() => import("./pages/marketplace/api-reviews"));
 const CreateReview = lazy(() => import("./pages/marketplace/create-review"));
 const Purchased = lazy(() => import("./pages/purchase"));
@@ -46,6 +47,8 @@ function App() {
               <Route path="/marketplace" element={<ApiMarketplace />} />
               <Route path="/marketplace/:apiId" element={<ApiMarketDetails />} />
               <Route path="/marketplace/:apiId/reviews" element={<ApiReviews />} />
+              <Route path="/test" element={<ApiDetailsTestPage />} />
+              
                 </Route>
               {/* Fallback routes */}
               {/* <Route path="/404" element={<NotFound />} /> */}
