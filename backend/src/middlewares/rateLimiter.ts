@@ -2,12 +2,14 @@ import { Request, Response, NextFunction } from 'express';
 import { RateLimiterRedis, RateLimiterMemory } from 'rate-limiter-flexible';
 import redis, { isRedisAvailable } from '../config/redis';
 import { logger } from '../utils/logger';
-
+import rateLimit from 'express-rate-limit';
 // Memory-based fallback rate limiters
 const memoryRateLimiter = new RateLimiterMemory({
   points: 60, // Maximum number of requests
   duration: 60, // Per minute
 });
+
+
 
 const memoryAuthLimiter = new RateLimiterMemory({
   points: 5, // Maximum number of requests
@@ -56,6 +58,27 @@ const apiRateLimiter = createRedisRateLimiter({
   duration: 60, // Per minute
   blockDuration: 60 * 2, // Block for 2 minutes if exceeded
 });
+
+export const publicLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20, // Limit to 20 requests per 5 minutes for public access
+  standardHeaders: true,
+  message: {
+  error: 'Public API rate limit exceeded',
+  message: 'For higher limits, please register and purchase API access'
+  }
+  });
+  // NEW: Public testing limiter - very restrictive
+  export const publicTestLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // Limit to 5 test requests per 5 minutes for public testing
+  standardHeaders: true,
+  message: {
+  error: 'Public testing rate limit exceeded',
+  message: 'To test APIs more frequently, please register and purchase API access'
+  }
+  });
+
 
 // Stricter rate limiter for authentication
 const authRateLimiter = createRedisRateLimiter({
@@ -118,6 +141,51 @@ export const authLimiter = async (req: Request, res: Response, next: NextFunctio
       });
     }
   }
+};
+
+export const publicDynamicLimiter = (apiId: string, limit: number = 10) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const key = `public:${apiId}:${ip}`;
+    try {
+      if (!isRedisAvailable()) {
+        // If Redis isn't available, fall back to in-memory rate limiting with lower limits
+        rateLimit({
+          windowMs: 60 * 1000, // 1 minute window
+          max: Math.min(limit, 5), // Cap at 5 for safety in fallback mode
+          standardHeaders: true,
+        })(req, res, next);
+        return;
+      }
+      const rateLimitKey = `ratelimit:${key}`;
+      const currentCount = await redis.get(rateLimitKey);
+      const count = currentCount ? parseInt(currentCount) : 0;
+      // Add rate limit headers
+      res.setHeader('X-RateLimit-Limit', limit.toString());
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, limit - count - 1).toString());
+      res.setHeader('X-Public-Access', 'true');
+      if (count >= limit) {
+        return res.status(429).json({
+          error: 'Public API rate limit exceeded',
+          message: `Public access is limited to ${limit} requests per minute per IP`,
+          publicAccess: true,
+          upgrade: 'Register for an account to get higher rate limits'
+        });
+      }
+      // Increment counter
+      if (count === 0) {
+        await redis.set(rateLimitKey, '1', 'EX', 60); // 1 minute expiry
+      } else {
+        await redis.incr(rateLimitKey);
+      }
+      next();
+    } catch (error) {
+      logger.error('Public rate limiting error:', error);
+      // Continue anyway with a warning header
+      res.setHeader('X-Rate-Limit-Warning', 'Rate limiting unavailable');
+      next();
+    }
+  };
 };
 
 // Middleware for dynamic API usage rate limiting

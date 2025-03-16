@@ -1,14 +1,22 @@
 import { Router } from "express";
 import { checkJwt } from "../middlewares/auth";
 import apiTestController from "../controllers/api/apiTestController";
-import { apiLimiter } from "../middlewares/rateLimiter";
+import { apiLimiter, publicLimiter } from "../middlewares/rateLimiter";
 
 const router = Router();
 
 // All routes require authentication
-router.use(checkJwt);
+router.use(checkJwt)
 
+router.post("/:apiId/public-test", publicLimiter, apiTestController.testPublicEndpoint);
 // Execute a test against an API endpoint
+
+router.post("/:apiId/endpoints/:endpointId/public-test", publicLimiter, apiTestController.testPublicEndpoint);
+
+
+router.post("/generate-curl", publicLimiter, apiTestController.generateCurl);
+// Routes requiring authentication
+
 router.post("/:apiId/test", apiLimiter, apiTestController.testEndpoint);
 
 // Execute a test against a specific endpoint
