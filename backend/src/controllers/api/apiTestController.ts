@@ -15,7 +15,6 @@ import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
-// Define types for test requests and responses
 interface TestRequest {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS';
   url: string;
@@ -98,239 +97,272 @@ const testRequestSchema = z.object({
  * Execute a test against an endpoint for authenticated users who have purchased the API
  */
 export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    if (!req.auth?.sub) {
-      res.status(401).json({ error: "Unauthorized" });
+  if (!req.auth?.sub) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  try {
+    const { apiId, endpointId } = req.params;
+    // Get user from auth0Id
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
       return;
     }
-  
-    try {
-      const { apiId, endpointId } = req.params;
-  
-      // Get user from auth0Id
-      const user = await prisma.user.findUnique({
-        where: { auth0Id: req.auth.sub },
-      });
-  
-      if (!user) {
-        res.status(404).json({ error: "User not found" });
-        return;
-      }
-  
-      // Check if the user can access this API
-      const api = await prisma.api.findUnique({
-        where: { id: apiId },
-        include: {
-          endpoints: true,
+
+    // Check if the user can access this API
+    const api = await prisma.api.findUnique({
+      where: { id: apiId },
+      include: {
+        endpoints: true,
+      },
+    });
+
+    if (!api) {
+      res.status(404).json({ error: "API not found" });
+      return;
+    }
+
+    // User can test if they own the API or have purchased it
+    let canTest = api.ownerId === user.id;
+    if (!canTest) {
+      const purchased = await prisma.purchasedAPI.findUnique({
+        where: {
+          userId_apiId: {
+            userId: user.id,
+            apiId,
+          },
         },
       });
-  
-      if (!api) {
-        res.status(404).json({ error: "API not found" });
-        return;
-      }
-  
-      // User can test if they own the API or have purchased it
-      let canTest = api.ownerId === user.id;
-      if (!canTest) {
-        const purchased = await prisma.purchasedAPI.findUnique({
-          where: {
-            userId_apiId: {
-              userId: user.id,
-              apiId,
-            },
-          },
-        });
-        canTest = !!purchased;
-      }
-  
-      if (!canTest) {
-        // If user hasn't purchased, redirect to public testing endpoint
-        return testPublicEndpoint(req as Request, res);
-      }
-  
-      // Find the specific endpoint if provided
-      let endpoint: Endpoint | null = null;
-      if (endpointId) {
-        endpoint = api.endpoints.find((e) => e.id === endpointId) || null;
-        if (!endpoint) {
-          res.status(404).json({ error: "Endpoint not found" });
-          return;
-        }
-      }
-  
-      // Validate test request
-      const validated = testRequestSchema.safeParse(req.body);
-      if (!validated.success) {
-        res.status(400).json({ error: validated.error.format() });
-        return;
-      }
-  
-      const testRequest = validated.data as TestRequest;
-  
-      // Generate cache key for this test request
-      const cacheKey = `test-result:${apiId}:${crypto
-        .createHash("md5")
-        .update(JSON.stringify(testRequest))
-        .digest("hex")}`;
-  
-      // Check if we have cached results for this exact test request
-      if (isRedisAvailable()) {
-        const cachedResult = await getCachedData<TestResponse>(cacheKey);
-        if (cachedResult) {
-          // Return cached test result
-          res.json({
-            ...cachedResult,
-            cache: "HIT",
-          });
-          return;
-        }
-      }
-  
-      // Prepare request configuration
-      const config: AxiosRequestConfig = {
-        method: testRequest.method,
-        url: testRequest.url,
-        headers: testRequest.headers || {},
-        params: testRequest.queryParams || {},
-        data: testRequest.body,
-        validateStatus: () => true, // Accept any status to avoid exceptions
-        timeout: testRequest.timeout || 30000, // Default 30s timeout
-      };
-  
-      // Add authentication if specified
-      if (testRequest.auth) {
-        switch (testRequest.auth.type) {
-          case "basic":
-            if (testRequest.auth.username && testRequest.auth.password) {
-              config.auth = {
-                username: testRequest.auth.username,
-                password: testRequest.auth.password,
-              };
-            }
-            break;
-          case "bearer":
-            if (testRequest.auth.token && config.headers) {
-              config.headers.Authorization = `Bearer ${testRequest.auth.token}`;
-            }
-            break;
-          case "apiKey":
-            if (testRequest.auth.key && testRequest.auth.keyName) {
-              if (testRequest.auth.in === "header" && config.headers) {
-                config.headers[testRequest.auth.keyName] = testRequest.auth.key;
-              } else if (testRequest.auth.in === "query" && config.params) {
-                (config.params as Record<string, string>)[testRequest.auth.keyName] =
-                  testRequest.auth.key;
-              }
-            }
-            break;
-        }
-      }
-  
-      // Execute request and measure performance
-      const startTime = performance.now();
-      let response: AxiosResponse;
-      let error: { message: string; code: string } | null = null;
-  
-      try {
-        response = await axios(config);
-      } catch (e) {
-        const axiosError = e as AxiosError;
-        error = {
-          message: axiosError.message,
-          code: axiosError.code || "REQUEST_FAILED",
-        };
-        // Create a minimal response for the error case
-        response = {
-          status: 0,
-          statusText: "Error",
-          headers: {},
-          data: null,
-          config,
-          request: {},
-        } as AxiosResponse;
-      }
-  
-      const endTime = performance.now();
-      const duration = Math.round(endTime - startTime);
-  
-      // When testing APIs, track the usage for analytics
-      if (!error && endpointId) {
-        try {
-          // Track API usage asynchronously (don't wait for it)
-          await prisma.apiAnalytics.update({
-            where: { apiId },
-            data: {
-              testCount: { increment: 1 } as Prisma.IntFieldUpdateOperationsInput,
-            } as Prisma.ApiAnalyticsUpdateInput,
-          });
-        } catch (usageError) {
-          logger.warn("Failed to record API usage for test:", usageError);
-        }
-      }
-  
-      // Prepare test result
-      let result: TestResponse;
-      if (error) {
-        result = {
-          success: false,
-          error,
-          duration,
-          request: {
-            method: config.method || "",
-            url: config.url || "",
-            headers: (config.headers as Record<string, string>) || {},
-            params: (config.params as Record<string, string>) || {},
-            data: config.data,
-          },
-          cache: "MISS",
-        };
-      } else {
-        // Transform headers to match the expected type
-        const headers: Record<string, string | string[]> = {};
-        for (const [key, value] of Object.entries(response.headers)) {
-          if (typeof value === "string" || Array.isArray(value)) {
-            headers[key] = value;
-          } else if (value !== undefined) {
-            // Convert non-string values to strings
-            headers[key] = String(value);
-          }
-        }
-  
-        result = {
-          success: response.status >= 200 && response.status < 300,
-          duration,
-          response: {
-            status: response.status,
-            statusText: response.statusText,
-            headers, // Use the transformed headers
-            data: response.data,
-            size: JSON.stringify(response.data || "").length,
-          },
-          request: {
-            method: config.method || "",
-            url: config.url || "",
-            headers: (config.headers as Record<string, string>) || {},
-            params: (config.params as Record<string, string>) || {},
-            data: config.data,
-          },
-          cache: "MISS",
-        };
-      }
-  
-      // Cache test results for successful queries
-      if (isRedisAvailable() && !error) {
-        // Cache test results for a short period (1 minute)
-        await cacheData(cacheKey, result, CACHE_TTL.SHORT).catch((err) => {
-          logger.warn(`Failed to cache test result: ${err}`);
-        });
-      }
-  
-      res.json(result);
-    } catch (error) {
-      logger.error("Error testing endpoint:", error);
-      res.status(500).json({ error: "Failed to execute API test" });
+      canTest = !!purchased;
     }
-  };
+
+    if (!canTest) {
+      // If user hasn't purchased, redirect to public testing endpoint
+      return testPublicEndpoint(req as Request, res);
+    }
+
+    // Find the specific endpoint if provided
+    let endpoint: Endpoint | null = null;
+    if (endpointId) {
+      endpoint = api.endpoints.find((e) => e.id === endpointId) || null;
+      if (!endpoint) {
+        res.status(404).json({ error: "Endpoint not found" });
+        return;
+      }
+    }
+
+    // Validate test request
+    const validated = testRequestSchema.safeParse(req.body);
+    if (!validated.success) {
+      res.status(400).json({ error: validated.error.format() });
+      return;
+    }
+
+    const testRequest = validated.data as TestRequest;
+
+    // Generate cache key for this test request
+    const cacheKey = `test-result:${apiId}:${crypto
+      .createHash("md5")
+      .update(JSON.stringify(testRequest))
+      .digest("hex")}`;
+
+    // Check if we have cached results for this exact test request
+    if (isRedisAvailable()) {
+      console.log("Cache is available");
+      const cachedResult = await getCachedData<TestResponse>(cacheKey);
+      if (cachedResult) {
+        // Return cached test result
+        res.json({
+          ...cachedResult,
+          cache: "HIT",
+        });
+        return;
+      }
+    }
+
+    // Prepare request configuration
+    const config: AxiosRequestConfig = {
+      method: testRequest.method,
+      url: testRequest.url,
+      headers: testRequest.headers || {},
+      params: testRequest.queryParams || {},
+      data: testRequest.body,
+      validateStatus: () => true, // Accept any status to avoid exceptions
+      timeout: testRequest.timeout || 30000, // Default 30s timeout
+    };
+
+    // Add authentication if specified
+    if (testRequest.auth) {
+      switch (testRequest.auth.type) {
+        case "basic":
+          if (testRequest.auth.username && testRequest.auth.password) {
+            config.auth = {
+              username: testRequest.auth.username,
+              password: testRequest.auth.password,
+            };
+          }
+          break;
+        case "bearer":
+          if (testRequest.auth.token && config.headers) {
+            config.headers.Authorization = `Bearer ${testRequest.auth.token}`;
+          }
+          break;
+        case "apiKey":
+          if (testRequest.auth.key && testRequest.auth.keyName) {
+            if (testRequest.auth.in === "header" && config.headers) {
+              config.headers[testRequest.auth.keyName] = testRequest.auth.key;
+            } else if (testRequest.auth.in === "query" && config.params) {
+              (config.params as Record<string, string>)[testRequest.auth.keyName] =
+                testRequest.auth.key;
+            }
+          }
+          break;
+      }
+    }
+
+    // Execute request and measure performance
+    const startTime = performance.now();
+    let response: AxiosResponse;
+    let error: { message: string; code: string } | null = null;
+
+    try {
+      response = await axios(config);
+    } catch (e) {
+      const axiosError = e as AxiosError;
+      error = {
+        message: axiosError.message,
+        code: axiosError.code || "REQUEST_FAILED",
+      };
+      // Create a minimal response for the error case
+      response = {
+        status: 0,
+        statusText: "Error",
+        headers: {},
+        data: null,
+        config,
+        request: {},
+      } as AxiosResponse;
+    }
+
+    const endTime = performance.now();
+    const duration = Math.round(endTime - startTime);
+
+    // Update API analytics
+    try {
+      // First, check if analytics record exists
+      let analytics = await prisma.apiAnalytics.findUnique({
+        where: { apiId },
+      });
+
+      if (!analytics) {
+        // Create a new analytics record if it doesn't exist
+        analytics = await prisma.apiAnalytics.create({
+          data: {
+            apiId,
+            totalCalls: 1,
+            successCalls: error ? 0 : 1,
+            failedCalls: error ? 1 : 0,
+            responseTimeAvg: duration,
+            errorRate: error ? 1.0 : 0.0,
+          },
+        });
+      } else {
+        // Update existing analytics
+        const newTotalCalls = analytics.totalCalls + 1;
+        const newSuccessCalls = analytics.successCalls + (error ? 0 : 1);
+        const newFailedCalls = analytics.failedCalls + (error ? 1 : 0);
+
+        // Calculate new average response time
+        const newResponseTimeAvg =
+          (analytics.responseTimeAvg * analytics.totalCalls + duration) / newTotalCalls;
+
+        // Calculate new error rate
+        const newErrorRate = newFailedCalls / newTotalCalls;
+
+        await prisma.apiAnalytics.update({
+          where: { apiId },
+          data: {
+            totalCalls: newTotalCalls,
+            successCalls: newSuccessCalls,
+            failedCalls: newFailedCalls,
+            responseTimeAvg: newResponseTimeAvg,
+            errorRate: newErrorRate,
+          },
+        });
+      }
+    } catch (analyticsError) {
+      // Log error but don't fail the request
+      logger.warn("Failed to update API analytics:", analyticsError);
+    }
+
+    // Prepare test result
+    let result: TestResponse;
+    if (error) {
+      result = {
+        success: false,
+        error,
+        duration,
+        request: {
+          method: config.method || "",
+          url: config.url || "",
+          headers: (config.headers as Record<string, string>) || {},
+          params: (config.params as Record<string, string>) || {},
+          data: config.data,
+        },
+        cache: "MISS",
+      };
+    } else {
+      // Transform headers to match the expected type
+      const headers: Record<string, string | string[]> = {};
+      for (const [key, value] of Object.entries(response.headers)) {
+        if (typeof value === "string" || Array.isArray(value)) {
+          headers[key] = value;
+        } else if (value !== undefined) {
+          // Convert non-string values to strings
+          headers[key] = String(value);
+        }
+      }
+
+      result = {
+        success: response.status >= 200 && response.status < 300,
+        duration,
+        response: {
+          status: response.status,
+          statusText: response.statusText,
+          headers, // Use the transformed headers
+          data: response.data,
+          size: JSON.stringify(response.data || "").length,
+        },
+        request: {
+          method: config.method || "",
+          url: config.url || "",
+          headers: (config.headers as Record<string, string>) || {},
+          params: (config.params as Record<string, string>) || {},
+          data: config.data,
+        },
+        cache: "MISS",
+      };
+    }
+
+    // Cache test results for successful queries
+    if (isRedisAvailable() && !error) {
+      // Cache test results for a short period (1 minute)
+      await cacheData(cacheKey, result, CACHE_TTL.SHORT).catch((err) => {
+        logger.warn(`Failed to cache test result: ${err}`);
+      });
+    }
+
+    res.json(result);
+  } catch (error) {
+    logger.error("Error testing endpoint:", error);
+    res.status(500).json({ error: "Failed to execute API test" });
+  }
+};
 
 /**
  * Test API for unauthenticated users or users who haven't purchased the API
@@ -340,9 +372,8 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
 
   try {
     const { apiId, endpointId } = req.params;
-
     // Check rate limiting based on IP
-    const ip = req.ip || 'unknown';
+    const ip = req.ip || "unknown";
     const publicRateLimit = 5; // Only 5 requests per minute for public testing
 
     // Validate the request body
@@ -358,8 +389,8 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     const api = await prisma.api.findUnique({
       where: { id: apiId },
       include: {
-        endpoints: true
-      }
+        endpoints: true,
+      },
     });
 
     if (!api) {
@@ -368,10 +399,10 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     }
 
     // Check if the API allows public testing
-    if (api.pricingModel === 'PAID' && !(api as any).allowPublicTesting) {
+    if (api.pricingModel === "PAID" && !(api as any).allowPublicTesting) {
       res.status(403).json({
         error: "This API requires purchase before testing",
-        message: "The API owner has disabled public testing for this paid API."
+        message: "The API owner has disabled public testing for this paid API.",
       });
       return;
     }
@@ -379,16 +410,17 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     // Find the specific endpoint if provided
     let endpoint = null;
     if (endpointId) {
-      endpoint = api.endpoints.find(e => e.id === endpointId) || null;
+      endpoint = api.endpoints.find((e) => e.id === endpointId) || null;
       if (!endpoint) {
         res.status(404).json({ error: "Endpoint not found" });
         return;
       }
+
       // Check if endpoint allows public testing
       if ((endpoint as any).restrictPublicTesting) {
         res.status(403).json({
           error: "This endpoint requires purchase",
-          message: "The API owner has restricted this endpoint to paid users only."
+          message: "The API owner has restricted this endpoint to paid users only.",
         });
         return;
       }
@@ -402,7 +434,7 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
       params: testRequest.queryParams || {},
       data: testRequest.body,
       validateStatus: () => true, // Accept any status to avoid exceptions
-      timeout: 15000 // 15 seconds timeout (shorter than for paid users)
+      timeout: 15000, // 15 seconds timeout (shorter than for paid users)
     };
 
     // Add authentication if specified
@@ -412,7 +444,7 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
           if (testRequest.auth.username && testRequest.auth.password) {
             config.auth = {
               username: testRequest.auth.username,
-              password: testRequest.auth.password
+              password: testRequest.auth.password,
             };
           }
           break;
@@ -426,7 +458,8 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
             if (testRequest.auth.in === "header" && config.headers) {
               config.headers[testRequest.auth.keyName] = testRequest.auth.key;
             } else if (testRequest.auth.in === "query" && config.params) {
-              (config.params as Record<string, string>)[testRequest.auth.keyName] = testRequest.auth.key;
+              (config.params as Record<string, string>)[testRequest.auth.keyName] =
+                testRequest.auth.key;
             }
           }
           break;
@@ -436,103 +469,112 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     // Execute request and measure performance
     let response: AxiosResponse;
     let error: { message: string; code: string } | null = null;
+    let isSuccessful = false;
 
     try {
       response = await axios(config);
+      isSuccessful = response.status >= 200 && response.status < 300;
     } catch (e) {
       const axiosError = e as AxiosError;
       error = {
         message: axiosError.message,
-        code: axiosError.code || 'REQUEST_FAILED'
+        code: axiosError.code || "REQUEST_FAILED",
       };
+
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
+
+      // Update API analytics for failed requests
+      try {
+        await updateApiAnalytics(apiId, duration, false);
+      } catch (analyticsError) {
+        logger.warn("Failed to update API analytics for failed request:", analyticsError);
+      }
+
       res.status(200).json({
         success: false,
         error,
         duration,
         request: {
-          method: config.method || '',
-          url: config.url || '',
-          headers: config.headers as Record<string, string> || {},
-          params: config.params as Record<string, string> || {},
-          data: config.data
+          method: config.method || "",
+          url: config.url || "",
+          headers: (config.headers as Record<string, string>) || {},
+          params: (config.params as Record<string, string>) || {},
+          data: config.data,
         },
         publicTesting: {
           limited: true,
           truncated: false,
           message: "You're testing with free limitations. Purchase for full access.",
-          rateLimit: publicRateLimit
-        }
+          rateLimit: publicRateLimit,
+        },
       });
       return;
     }
 
     // Calculate duration
-    let endTime = performance.now();
+    const endTime = performance.now();
     let duration = Math.round(endTime - startTime);
 
-    // Track the public test in analytics
+    // Update API analytics for successful requests
     try {
-      await prisma.apiAnalytics.update({
-        where: { apiId },
-        data: {
-          publicTestCount: { increment: 1 } as Prisma.IntFieldUpdateOperationsInput
-        } as Prisma.ApiAnalyticsUpdateInput
-      });
-
-      // Track in Redis if available
-      if (isRedisAvailable()) {
-        const today = new Date().toISOString().split('T')[0];
-        await cacheData(`analytics:public:${apiId}:${today}`, 1, 60 * 60 * 24 * 7);
-      }
+      await updateApiAnalytics(apiId, duration, true);
     } catch (analyticsError) {
-      logger.error("Failed to track public API test:", analyticsError);
-      // Continue anyway, this shouldn't affect the user experience
+      logger.warn("Failed to update API analytics for successful request:", analyticsError);
     }
 
     // For public testing, apply limitations:
     // 1. Add artificial delay to show performance benefits of purchasing
-    if (api.pricingModel === 'PAID') {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (api.pricingModel === "PAID") {
+      await new Promise((resolve) => setTimeout(resolve, 500));
       duration += 500; // Add delay to reported duration
     }
 
     // 2. Limit response size for large responses
     let responseData = response.data;
     let isTruncated = false;
+
     if (responseData) {
       const responseStr = JSON.stringify(responseData);
       if (responseStr.length > 5000) {
         isTruncated = true;
+
         // For JSON responses, truncate in a structured way
-        if (typeof responseData === 'object' && responseData !== null) {
+        if (typeof responseData === "object" && responseData !== null) {
           if (Array.isArray(responseData)) {
             // For arrays, just take the first few items
             responseData = responseData.slice(0, 3);
           } else {
             // For objects, keep the structure but limit nested objects
-            const truncateObject = (obj: Record<string, any>, depth: number = 0): Record<string, any> => {
+            const truncateObject = (
+              obj: Record<string, any>,
+              depth: number = 0
+            ): Record<string, any> => {
               if (depth > 2) return { _truncated: true };
               const result: Record<string, any> = {};
               let i = 0;
+
               for (const [key, val] of Object.entries(obj)) {
                 if (i++ > 10) {
                   result._moreProps = `${Object.keys(obj).length - 10} more properties`;
                   break;
                 }
-                if (typeof val === 'object' && val !== null) {
+
+                if (typeof val === "object" && val !== null) {
                   result[key] = truncateObject(val, depth + 1);
                 } else {
                   result[key] = val;
                 }
               }
+
               return result;
             };
+
             responseData = truncateObject(responseData);
           }
+
           // Add message about truncation
-          if (typeof responseData === 'object' && responseData !== null) {
+          if (typeof responseData === "object" && responseData !== null) {
             responseData._publicTestLimitation = "Response truncated. Purchase API for full response.";
           }
         } else {
@@ -544,28 +586,31 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
 
     // Format the response
     const result: TestResponse = {
-      success: response.status >= 200 && response.status < 300,
+      success: isSuccessful,
       duration,
       response: {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers as Record<string, string | string[]>,
         data: responseData,
-        size: typeof responseData === 'object' ? JSON.stringify(responseData).length : String(responseData).length
+        size:
+          typeof responseData === "object"
+            ? JSON.stringify(responseData).length
+            : String(responseData).length,
       },
       request: {
-        method: config.method || '',
-        url: config.url || '',
-        headers: config.headers as Record<string, string> || {},
-        params: config.params as Record<string, string> || {},
-        data: config.data
+        method: config.method || "",
+        url: config.url || "",
+        headers: (config.headers as Record<string, string>) || {},
+        params: (config.params as Record<string, string>) || {},
+        data: config.data,
       },
       publicTesting: {
         limited: true,
         truncated: isTruncated,
         message: "You're testing with free limitations. Purchase for full access.",
-        rateLimit: publicRateLimit
-      }
+        rateLimit: publicRateLimit,
+      },
     };
 
     res.status(200).json(result);
@@ -574,6 +619,62 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     res.status(500).json({ error: "Failed to execute public API test" });
   }
 };
+
+/**
+ * Helper function to update API analytics
+ */
+async function updateApiAnalytics(
+  apiId: string,
+  duration: number,
+  isSuccessful: boolean
+): Promise<void> {
+  try {
+    // Check if analytics record exists
+    let analytics = await prisma.apiAnalytics.findUnique({
+      where: { apiId },
+    });
+
+    if (!analytics) {
+      // Create a new analytics record
+      await prisma.apiAnalytics.create({
+        data: {
+          apiId,
+          totalCalls: 1,
+          successCalls: isSuccessful ? 1 : 0,
+          failedCalls: isSuccessful ? 0 : 1,
+          responseTimeAvg: duration,
+          errorRate: isSuccessful ? 0 : 1,
+        },
+      });
+    } else {
+      // Update existing analytics
+      const newTotalCalls = analytics.totalCalls + 1;
+      const newSuccessCalls = analytics.successCalls + (isSuccessful ? 1 : 0);
+      const newFailedCalls = analytics.failedCalls + (isSuccessful ? 0 : 1);
+
+      // Calculate new average response time
+      const newResponseTimeAvg =
+        (analytics.responseTimeAvg * analytics.totalCalls + duration) / newTotalCalls;
+
+      // Calculate new error rate
+      const newErrorRate = newFailedCalls / newTotalCalls;
+
+      await prisma.apiAnalytics.update({
+        where: { apiId },
+        data: {
+          totalCalls: newTotalCalls,
+          successCalls: newSuccessCalls,
+          failedCalls: newFailedCalls,
+          responseTimeAvg: newResponseTimeAvg,
+          errorRate: newErrorRate,
+        },
+      });
+    }
+  } catch (error) {
+    // Re-throw to let caller handle or log the error
+    throw error;
+  }
+}
 
 /**
  * Generate a cURL command for an endpoint test

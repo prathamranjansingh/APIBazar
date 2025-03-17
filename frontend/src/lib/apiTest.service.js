@@ -1,4 +1,4 @@
-import api from './api-test'
+import api from './api-test';
 
 const ApiTestService = {
   /**
@@ -6,8 +6,8 @@ const ApiTestService = {
    */
   testPublicApi: async (apiId, endpointId, testRequest) => {
     const url = endpointId
-      ? `/public-api-test/${apiId}/endpoints/${endpointId}`
-      : `/public-api-test/${apiId}`;
+      ? `/api-proxy/public-test/${apiId}/${endpointId}`
+      : `/api-proxy/public-test/${apiId}`;
     const response = await api.post(url, testRequest);
     return response.data;
   },
@@ -17,17 +17,17 @@ const ApiTestService = {
    */
   testPurchasedApi: async (apiId, endpointId, testRequest) => {
     const url = endpointId
-      ? `/api-test/${apiId}/endpoints/${endpointId}/test`
-      : `/api-test/${apiId}/test`;
+      ? `/api-proxy/${apiId}/endpoints/${endpointId}/test`
+      : `/api-proxy/${apiId}/test`;
     const response = await api.post(url, testRequest);
     return response.data;
   },
 
   /**
-   * Get sample request for an endpoint (public)
+   * Get sample request for an endpoint
    */
   getSampleRequest: async (apiId, endpointId) => {
-    const response = await api.get(`/api-test/${apiId}/endpoints/${endpointId}/sample`);
+    const response = await api.get(`/api-proxy/${apiId}/endpoints/${endpointId}/sample`);
     return response.data;
   },
 
@@ -35,8 +35,37 @@ const ApiTestService = {
    * Generate cURL command for a request
    */
   generateCurl: async (request) => {
-    const response = await api.post('/api-test/generate-curl', request);
+    const response = await api.post('/api-proxy/curl', request);
     return response.data.curl;
+  },
+
+  /**
+   * Generate SDK code for an API
+   */
+  generateSdkCode: async (apiId, language) => {
+    // Try authenticated SDK generation first
+    try {
+      const response = await api.get(`/api-proxy/${apiId}/sdk/${language}`);
+      return {
+        code: response.data.code,
+        language: response.data.language,
+        fileName: response.data.fileName,
+        publicAccess: false,
+      };
+    } catch (error) {
+      // If authentication fails, try public SDK generation
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        const response = await api.get(`/api-proxy/public/${apiId}/sdk/${language}`);
+        return {
+          code: response.data.code,
+          language: response.data.language,
+          fileName: response.data.fileName,
+          publicAccess: true,
+          notice: response.data.notice,
+        };
+      }
+      throw error; // Re-throw if other error
+    }
   },
 };
 

@@ -6,6 +6,7 @@ const router = Router();
 // All routes require authentication
 router.use(checkJwt);
 router.get("/me", userController.getMyProfile);
+router.get('/purchases/:apiId', userController.checkApiPurchase);
 router.patch("/me", userController.updateUserProfile);
 router.patch("/me/profile", userController.updateProfile);
 router.get("/me/notifications", userController.getMyNotifications);

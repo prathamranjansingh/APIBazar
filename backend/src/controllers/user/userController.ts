@@ -128,6 +128,67 @@ export const getMyProfile = async (req: AuthenticatedRequest, res: Response): Pr
     res.status(500).json({ error: "Failed to fetch profile" });
   }
 };
+
+/**
+ * Check if the current user has purchased an API
+ */
+export const checkApiPurchase = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    // Check if the user is authenticated
+    if (!req.auth?.sub) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { apiId } = req.params;
+
+    // Find the user
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Check if the API exists
+    const api = await prisma.api.findUnique({
+      where: { id: apiId },
+    });
+
+    if (!api) {
+      res.status(404).json({ error: 'API not found' });
+      return;
+    }
+
+    // If the user is the API owner, they have automatic access
+    if (api.ownerId === user.id) {
+      res.json({ purchased: true, owner: true });
+      return;
+    }
+
+    // Otherwise, check if the user has purchased the API
+    const purchase = await prisma.purchasedAPI.findUnique({
+      where: {
+        userId_apiId: {
+          userId: user.id,
+          apiId: apiId,
+        },
+      },
+    });
+
+    res.json({
+      purchased: !!purchase,
+      owner: false,
+      purchasedAt: purchase?.createdAt || null, // Using `createdAt` as a substitute for `purchasedAt`
+    });
+  } catch (error) {
+    logger.error('Error checking API purchase status:', error);
+    res.status(500).json({ error: 'Failed to check purchase status' });
+  }
+};
+
 /**
  * Get user's notifications
  */
@@ -215,7 +276,8 @@ export default {
   updateProfile,
   getMyProfile,
   getMyNotifications,
-  markNotificationsAsRead
+  markNotificationsAsRead,
+  checkApiPurchase
 };
 
 
