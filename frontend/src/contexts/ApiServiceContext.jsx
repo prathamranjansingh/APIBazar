@@ -10,7 +10,7 @@ const ApiServiceContext = createContext(null);
 // Provider component to wrap around your application
 export const ApiServiceProvider = ({ children }) => {
   const { getAccessTokenSilently, isAuthenticated } = useAuth0();
-
+  const baseUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000/api";
   // Fetch API details
   const fetchApiDetails = async (apiId) => {
     try {
