@@ -18,9 +18,9 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
         apiId: data.apiId,
         isActive: true,
         events: {
-          has: data.event
-        }
-      }
+          has: data.event,
+        },
+      },
     });
 
     if (webhooks.length === 0) {
@@ -31,7 +31,7 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
     const enrichedPayload = {
       ...data.payload,
       timestamp: new Date().toISOString(),
-      event: data.event
+      event: data.event,
     };
 
     // Send webhook requests in parallel
@@ -42,7 +42,7 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
           const headers: Record<string, string> = {
             "Content-Type": "application/json",
             "User-Agent": "APIBazar-Webhook",
-            "X-Webhook-Event": data.event
+            "X-Webhook-Event": data.event,
           };
 
           if (webhook.secret) {
@@ -53,7 +53,7 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
           // Send the webhook
           const response = await axios.post(webhook.url, enrichedPayload, {
             headers,
-            timeout: 10000 // 10s timeout
+            timeout: 10000, // 10s timeout
           });
 
           // Update webhook status on success
@@ -62,32 +62,55 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
             data: {
               lastTriggered: new Date(),
               lastStatus: response.status,
-              failCount: 0 // Reset fail count on success
-            }
+              failCount: 0, // Reset fail count on success
+            },
+          });
+
+          // Record successful delivery
+          await prisma.webhookDelivery.create({
+            data: {
+              webhookId: webhook.id,
+              event: data.event,
+              status: "delivered",
+              payload: JSON.stringify(enrichedPayload),
+            },
           });
 
           logger.info(`Webhook ${webhook.id} triggered successfully for event ${data.event}`);
         } catch (error: any) {
+          // Update webhook status on failure
           await prisma.webhook.update({
             where: { id: webhook.id },
             data: {
               lastTriggered: new Date(),
               lastStatus: error.response?.status || 0,
               failCount: {
-                increment: 1
-              }
-            }
+                increment: 1,
+              },
+            },
+          });
+
+          // Record failed delivery
+          await prisma.webhookDelivery.create({
+            data: {
+              webhookId: webhook.id,
+              event: data.event,
+              status: "failed",
+              payload: JSON.stringify(enrichedPayload),
+              error: error.message || "Unknown error",
+            },
           });
 
           logger.error(`Webhook ${webhook.id} delivery failed:`, error.message);
 
           // If webhook has failed too many times, deactivate it
-          if (webhook.failCount >= 9) { // This will be 10 after the increment
+          if (webhook.failCount >= 9) {
+            // This will be 10 after the increment
             await prisma.webhook.update({
               where: { id: webhook.id },
               data: {
-                isActive: false
-              }
+                isActive: false,
+              },
             });
 
             // Notify the webhook owner
@@ -96,7 +119,7 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
               type: "SYSTEM" as const,
               title: "Webhook Deactivated",
               message: `Your webhook "${webhook.name}" has been automatically deactivated due to repeated delivery failures.`,
-              data: { webhookId: webhook.id }
+              data: { webhookId: webhook.id },
             };
 
             // Import dynamically to avoid circular dependency
@@ -106,7 +129,7 @@ export const triggerWebhooks = async (data: WebhookData): Promise<void> => {
             logger.warn(`Webhook ${webhook.id} automatically deactivated after repeated failures`);
           }
         }
-      })
+      }),
     );
   } catch (error) {
     logger.error("Error triggering webhooks:", error);

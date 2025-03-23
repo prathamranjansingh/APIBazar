@@ -143,24 +143,40 @@ model ApiKey {
 
 // ---------------- Webhooks ----------------
 
+model WebhookDelivery {
+  id        String   @id @default(uuid())
+  webhookId String
+  webhook   Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event     String
+  status    String  
+  payload   String  
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([webhookId])
+  @@index([status])
+}
+
 model Webhook {
-  id            String     @id @default(uuid())
+  id            String           @id @default(uuid())
   name          String
   url           String
   secret        String?
   userId        String
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiId         String
-  api           Api        @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  api           Api              @relation(fields: [apiId], references: [id], onDelete: Cascade)
   events        String[]
-  isActive      Boolean    @default(true)
-  createdAt     DateTime   @default(now())
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now())
   lastTriggered DateTime?
   lastStatus    Int?
-  failCount     Int        @default(0)
+  failCount     Int              @default(0)
+  deliveries    WebhookDelivery[] 
 
   @@index([apiId, isActive])
 }
+
 
 // ---------------- Notifications ----------------
 
