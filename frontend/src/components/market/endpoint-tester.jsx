@@ -109,8 +109,10 @@ const EndpointTester = ({ api, endpoint }) => {
           </div>
         </div>
         <CardDescription className="font-mono flex items-center">
+        <span className="truncate">
           {api.baseUrl}
           {endpoint.path}
+          </span>
           <Button
             variant="ghost"
             size="icon"

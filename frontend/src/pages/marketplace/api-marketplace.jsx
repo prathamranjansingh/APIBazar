@@ -1,25 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+"use client"
+
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Pagination,
   PaginationContent,
@@ -27,95 +16,93 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '@/components/ui/pagination';
-import MarketplaceService from '@/lib/marketplace-service';
+} from "@/components/ui/pagination"
+import MarketplaceService from "@/lib/marketplace-service"
 
 const ApiMarketplace = () => {
-  const navigate = useNavigate();
-  const [apis, setApis] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [category, setCategory] = useState('');
+  const navigate = useNavigate()
+  const [apis, setApis] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [category, setCategory] = useState("")
   const [pagination, setPagination] = useState({
     page: 1,
     totalPages: 1,
     limit: 10,
-  });
+  })
   const [categories, setCategories] = useState([
-    'Data',
-    'Finance',
-    'Weather',
-    'Social',
-    'E-commerce',
-    'Communication',
-    'AI',
-    'Analytics',
-    'Maps',
-    'Other',
-  ]);
+    "Data",
+    "Finance",
+    "Weather",
+    "Social",
+    "E-commerce",
+    "Communication",
+    "AI",
+    "Analytics",
+    "Maps",
+    "Other",
+  ])
 
   // Fetch APIs with search and filter
   const fetchApis = async () => {
     try {
-      setIsLoading(true);
+      setIsLoading(true)
       const params = {
         page: pagination.page,
         limit: pagination.limit,
-      };
+      }
       if (searchQuery) {
-        params.search = searchQuery;
+        params.search = searchQuery
       }
       if (category) {
-        params.category = category;
+        params.category = category
       }
-      const response = await MarketplaceService.getAllApis(params);
-      setApis(response.data);
+      const response = await MarketplaceService.getAllApis(params)
+      setApis(response.data)
       setPagination({
         ...pagination,
         totalPages: response.pagination.totalPages,
-      });
+      })
     } catch (error) {
-      toast.error('Failed to load APIs');
+      toast.error("Failed to load APIs")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   // Initial fetch
   useEffect(() => {
-    fetchApis();
-  }, [pagination.page, category]);
+    fetchApis()
+  }, [pagination.page, category])
 
   // Handle search with debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (pagination.page === 1) {
-        fetchApis();
+        fetchApis()
       } else {
-        setPagination({ ...pagination, page: 1 });
+        setPagination({ ...pagination, page: 1 })
       }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   // Handle category change
   const handleCategoryChange = (value) => {
-    setCategory(value === "all" ? "" : value);
-    setPagination({ ...pagination, page: 1 });
-  };
+    setCategory(value === "all" ? "" : value)
+    setPagination({ ...pagination, page: 1 })
+  }
 
   // Navigate to API details
   const handleViewApi = (apiId) => {
-    navigate(`/marketplace/${apiId}`);
-  };
+    navigate(`/marketplace/${apiId}`)
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col space-y-4">
         <h1 className="text-3xl font-bold">API Marketplace</h1>
-        <p className="text-muted-foreground">
-          Discover and connect to APIs for your applications
-        </p>
+        <p className="text-muted-foreground">Discover and connect to APIs for your applications</p>
 
         {/* Search and filter */}
         <div className="flex flex-col sm:flex-row gap-4 my-6">
@@ -127,9 +114,7 @@ const ApiMarketplace = () => {
               className="w-full"
             />
           </div>
-          <Select onValueChange={handleCategoryChange}
-            value={category === "" ? "all" : category}
-          >
+          <Select onValueChange={handleCategoryChange} value={category === "" ? "all" : category}>
             <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -168,9 +153,7 @@ const ApiMarketplace = () => {
             {apis.length === 0 ? (
               <div className="text-center py-12">
                 <h3 className="text-xl font-medium">No APIs found</h3>
-                <p className="text-muted-foreground mt-2">
-                  Try changing your search criteria or check back later
-                </p>
+                <p className="text-muted-foreground mt-2">Try changing your search criteria or check back later</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -179,15 +162,13 @@ const ApiMarketplace = () => {
                     <CardHeader className="pb-2">
                       <div className="flex justify-between items-start">
                         <CardTitle className="text-xl truncate">{api.name}</CardTitle>
-                        <Badge variant={api.pricingModel === 'FREE' ? 'secondary' : 'default'}>
-                          {api.pricingModel === 'FREE' ? 'Free' : `$${api.price}`}
+                        <Badge variant={api.pricingModel === "FREE" ? "secondary" : "default"}>
+                          {api.pricingModel === "FREE" ? "Free" : `$${api.price}`}
                         </Badge>
                       </div>
                       <CardDescription className="flex items-center gap-2">
                         <span className="truncate">{api.category}</span>
-                        <span className="text-muted-foreground text-xs">
-                          • {api._count.purchasedBy} users
-                        </span>
+                        <span className="text-muted-foreground text-xs">• {api._count.purchasedBy} users</span>
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="flex-grow">
@@ -195,7 +176,7 @@ const ApiMarketplace = () => {
                       <div className="mt-4 flex flex-wrap gap-2">
                         {api.endpoints.slice(0, 3).map((endpoint) => (
                           <Badge key={endpoint.id} variant="outline" className="text-xs">
-                            {endpoint.method} {endpoint.path.split('/').pop()}
+                            {endpoint.method} {endpoint.path.split("/").pop()}
                           </Badge>
                         ))}
                         {api.endpoints.length > 3 && (
@@ -208,13 +189,18 @@ const ApiMarketplace = () => {
                     <CardFooter className="flex justify-between pt-2 border-t">
                       <div className="flex items-center text-sm">
                         <img
-                          src={api.owner.picture || '/default-avatar.png'}
+                          src={api.owner.picture || "/default-avatar.png"}
                           alt={api.owner.name}
                           className="w-6 h-6 rounded-full mr-2"
                         />
                         <span className="truncate">{api.owner.name}</span>
                       </div>
-                      <Button onClick={() => handleViewApi(api.id)}>View Details</Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" onClick={() => navigate(`/marketplace/${api.id}/test`)}>
+                          Test API
+                        </Button>
+                        <Button onClick={() => handleViewApi(api.id)}>View Details</Button>
+                      </div>
                     </CardFooter>
                   </Card>
                 ))}
@@ -227,26 +213,21 @@ const ApiMarketplace = () => {
                 <PaginationContent>
                   <PaginationItem>
                     <PaginationPrevious
-                      onClick={() =>
-                        pagination.page > 1 &&
-                        setPagination({ ...pagination, page: pagination.page - 1 })
-                      }
-                      className={
-                        pagination.page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'
-                      }
+                      onClick={() => pagination.page > 1 && setPagination({ ...pagination, page: pagination.page - 1 })}
+                      className={pagination.page <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
                     />
                   </PaginationItem>
                   {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
                     // Logic to show current page and nearby pages
-                    let pageNumber;
+                    let pageNumber
                     if (pagination.totalPages <= 5) {
-                      pageNumber = i + 1;
+                      pageNumber = i + 1
                     } else if (pagination.page <= 3) {
-                      pageNumber = i + 1;
+                      pageNumber = i + 1
                     } else if (pagination.page >= pagination.totalPages - 2) {
-                      pageNumber = pagination.totalPages - 4 + i;
+                      pageNumber = pagination.totalPages - 4 + i
                     } else {
-                      pageNumber = pagination.page - 2 + i;
+                      pageNumber = pagination.page - 2 + i
                     }
                     return (
                       <PaginationItem key={pageNumber}>
@@ -258,7 +239,7 @@ const ApiMarketplace = () => {
                           {pageNumber}
                         </PaginationLink>
                       </PaginationItem>
-                    );
+                    )
                   })}
                   <PaginationItem>
                     <PaginationNext
@@ -267,9 +248,7 @@ const ApiMarketplace = () => {
                         setPagination({ ...pagination, page: pagination.page + 1 })
                       }
                       className={
-                        pagination.page >= pagination.totalPages
-                          ? 'pointer-events-none opacity-50'
-                          : 'cursor-pointer'
+                        pagination.page >= pagination.totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"
                       }
                     />
                   </PaginationItem>
@@ -280,7 +259,8 @@ const ApiMarketplace = () => {
         )}
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default ApiMarketplace;
+export default ApiMarketplace
+

@@ -333,7 +333,8 @@ const ApiMarketDetails = () => {
               <div>
                 <h4 className="font-medium text-sm text-muted-foreground mb-1">Base URL</h4>
                 <div className="flex items-center">
-                  <code className="bg-muted px-2 py-1 rounded text-sm">{api.baseUrl}</code>
+                  <code className="bg-muted px-2 py-1 rounded text-sm">
+                     <span className="truncate">{api.baseUrl} </span></code>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -454,8 +455,10 @@ const ApiMarketDetails = () => {
                         </Badge>
                         <CardTitle className="text-xl">{selectedEndpoint.name}</CardTitle>
                       </div>
-                      <CardDescription className="font-mono">
+                      <CardDescription className="font-mono overflow-hidden text-ellipsis whitespace-nowrap">
+                      <span className="truncate">
                         {api.baseUrl}{selectedEndpoint.path}
+                        </span > 
                       </CardDescription>
                     </CardHeader>
                     <CardContent>

@@ -256,6 +256,9 @@ const ApiDetail = () => {
             <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
               Delete API
             </Button>
+            <Button variant="outline" className="bg-green-500 hover:bg-green-500 hover:text-white text-white" onClick={() => navigate(`/apis/${id}/webhooks`)}>
+              Webhooks
+            </Button>
           </div>
         )}
       </div>
