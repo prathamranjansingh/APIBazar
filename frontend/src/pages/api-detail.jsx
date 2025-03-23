@@ -326,11 +326,11 @@ const ApiDetail = () => {
                         {api.endpoints.map((endpoint) => (
                           <div key={endpoint.id} className="border p-4 rounded">
                             <div className="flex justify-between">
-                              <div className="flex items-center">
+                              <div className="flex items-center overflow-hidden">
                                 <Badge className={`mr-2 ${getMethodColor(endpoint.method)}`}>
                                   {endpoint.method}
                                 </Badge>
-                                <span className="font-mono">{endpoint.path}</span>
+                                <span className="font-mono truncate ">{endpoint.path}</span>
                               </div>
                               {isOwner && (
                                 <div className="space-x-2">
@@ -345,7 +345,7 @@ const ApiDetail = () => {
                                     Edit
                                   </Button>
                                   <Button
-                                    variant="outline"
+                                    variant="destructive"
                                     size="sm"
                                     onClick={() => handleDeleteEndpoint(endpoint.id)}
                                     disabled={isSubmitting}
