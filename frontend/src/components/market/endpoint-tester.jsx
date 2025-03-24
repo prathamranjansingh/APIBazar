@@ -16,6 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Code, Copy, Send } from 'lucide-react';
 import MarketplaceService from '@/lib/marketplace-service';
+import { Link } from 'react-router-dom';
 
 const EndpointTester = ({ api, endpoint }) => {
   const [params, setParams] = useState({});
@@ -24,6 +25,7 @@ const EndpointTester = ({ api, endpoint }) => {
   const [response, setResponse] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('body');
+
 
   const handleParamChange = (key, value) => {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -35,40 +37,6 @@ const EndpointTester = ({ api, endpoint }) => {
 
   const handleBodyChange = (e) => {
     setBody(e.target.value);
-  };
-
-  const handleTestEndpoint = async () => {
-    if (!endpoint) return;
-    try {
-      setIsLoading(true);
-      let parsedBody = null;
-      if (body) {
-        try {
-          parsedBody = JSON.parse(body);
-        } catch (e) {
-          toast.error('Invalid JSON in request body');
-          setIsLoading(false);
-          return;
-        }
-      }
-      const testData = { params, headers, body: parsedBody };
-      const result = await MarketplaceService.testEndpoint(api.id, endpoint.id, testData);
-      setResponse(result);
-      if (result.statusCode >= 200 && result.statusCode < 300) {
-        toast.success(`Success (${result.statusCode})`);
-      } else {
-        toast.error(`Error (${result.statusCode})`);
-      }
-    } catch (error) {
-      setResponse({
-        status: 'error',
-        statusCode: error.response?.status || 500,
-        data: error.response?.data || { error: 'An error occurred while testing the endpoint' },
-      });
-      toast.error('Failed to test endpoint');
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleCopyResponse = () => {
@@ -210,16 +178,18 @@ const EndpointTester = ({ api, endpoint }) => {
               )}
             </Tabs>
           </div>
-          <Button onClick={handleTestEndpoint} disabled={isLoading} className="w-full">
-            {isLoading ? (
-              'Testing...'
-            ) : (
-              <>
-                <Send className="h-4 w-4 mr-2" />
-                Test Endpoint
-              </>
-            )}
-          </Button>
+          <Link to={`/marketplace/${api.id}/test`}>
+            <Button disabled={isLoading} className="w-full">
+              {isLoading ? (
+                'Testing...'
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Test Endpoint
+                </>
+              )}
+            </Button>
+          </Link>
           {response && (
             <div className="mt-6">
               <div className="flex justify-between items-center mb-2">

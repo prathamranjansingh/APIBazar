@@ -12,6 +12,7 @@ import {
   CACHE_TTL
 } from "../../config/redis";
 import crypto from 'crypto';
+import { triggerWebhooks } from '../../services/webhookService';
 
 const prisma = new PrismaClient();
 
@@ -96,6 +97,7 @@ const testRequestSchema = z.object({
 /**
  * Execute a test against an endpoint for authenticated users who have purchased the API
  */
+
 export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
@@ -104,11 +106,12 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
 
   try {
     const { apiId, endpointId } = req.params;
+    
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub },
     });
-
+    
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -117,11 +120,9 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
     // Check if the user can access this API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      include: {
-        endpoints: true,
-      },
+      include: { endpoints: true },
     });
-
+    
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
@@ -131,16 +132,11 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
     let canTest = api.ownerId === user.id;
     if (!canTest) {
       const purchased = await prisma.purchasedAPI.findUnique({
-        where: {
-          userId_apiId: {
-            userId: user.id,
-            apiId,
-          },
-        },
+        where: { userId_apiId: { userId: user.id, apiId } },
       });
       canTest = !!purchased;
     }
-
+    
     if (!canTest) {
       // If user hasn't purchased, redirect to public testing endpoint
       return testPublicEndpoint(req as Request, res);
@@ -162,7 +158,7 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
       res.status(400).json({ error: validated.error.format() });
       return;
     }
-
+    
     const testRequest = validated.data as TestRequest;
 
     // Generate cache key for this test request
@@ -177,10 +173,7 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
       const cachedResult = await getCachedData<TestResponse>(cacheKey);
       if (cachedResult) {
         // Return cached test result
-        res.json({
-          ...cachedResult,
-          cache: "HIT",
-        });
+        res.json({ ...cachedResult, cache: "HIT" });
         return;
       }
     }
@@ -229,7 +222,7 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
     const startTime = performance.now();
     let response: AxiosResponse;
     let error: { message: string; code: string } | null = null;
-
+    
     try {
       response = await axios(config);
     } catch (e) {
@@ -248,7 +241,7 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
         request: {},
       } as AxiosResponse;
     }
-
+    
     const endTime = performance.now();
     const duration = Math.round(endTime - startTime);
 
@@ -258,7 +251,7 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
       let analytics = await prisma.apiAnalytics.findUnique({
         where: { apiId },
       });
-
+      
       if (!analytics) {
         // Create a new analytics record if it doesn't exist
         analytics = await prisma.apiAnalytics.create({
@@ -276,11 +269,9 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
         const newTotalCalls = analytics.totalCalls + 1;
         const newSuccessCalls = analytics.successCalls + (error ? 0 : 1);
         const newFailedCalls = analytics.failedCalls + (error ? 1 : 0);
-
         // Calculate new average response time
         const newResponseTimeAvg =
           (analytics.responseTimeAvg * analytics.totalCalls + duration) / newTotalCalls;
-
         // Calculate new error rate
         const newErrorRate = newFailedCalls / newTotalCalls;
 
@@ -295,6 +286,43 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
           },
         });
       }
+
+      // Trigger webhook for API call event
+      const webhookData = {
+        apiId,
+        event: 'api_call',
+        payload: {
+          endpoint: endpoint?.path || testRequest.url,
+          method: testRequest.method,
+          userId: user.id,
+          userName: user.name || user.email,
+          responseStatus: response.status,
+          responseTime: duration,
+          queryParams: testRequest.queryParams || {},
+          headers: Object.keys(testRequest.headers || {}).reduce((acc, key) => {
+            // Exclude sensitive headers like Authorization
+            if (!key.toLowerCase().includes('auth') && !key.toLowerCase().includes('key')) {
+              acc[key] = testRequest.headers?.[key] || '';
+            }
+            return acc;
+          }, {} as Record<string, string>),
+          isTest: true,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      // If there was an error, include it in the webhook payload
+      if (error) {
+        webhookData.event = 'error_occurred';
+        (webhookData.payload as any).error = {
+          code: error.code,
+          message: error.message
+        };
+      }
+
+      // Trigger webhook asynchronously (don't await)
+      triggerWebhooks(webhookData)
+        .catch((err: any) => logger.error("Failed to trigger webhook:", err));
     } catch (analyticsError) {
       // Log error but don't fail the request
       logger.warn("Failed to update API analytics:", analyticsError);
@@ -361,6 +389,26 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
   } catch (error) {
     logger.error("Error testing endpoint:", error);
     res.status(500).json({ error: "Failed to execute API test" });
+    
+    // Optionally trigger error_occurred webhook for unexpected errors
+    if (req.params.apiId) {
+      try {
+        triggerWebhooks({
+          apiId: req.params.apiId,
+          event: 'error_occurred',
+          payload: {
+            errorCode: 500,
+            errorMessage: "Internal server error during API test",
+            endpoint: req.params.endpointId || "unknown",
+            method: req.body?.method || "unknown",
+            userId: req.auth?.sub || "unknown",
+            timestamp: new Date().toISOString()
+          }
+        }).catch((err: any) => logger.error("Failed to trigger error webhook:", err));
+      } catch (webhookError) {
+        logger.error("Failed to trigger webhook for error:", webhookError);
+      }
+    }
   }
 };
 
@@ -369,30 +417,29 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
  */
 export const testPublicEndpoint = async (req: Request, res: Response): Promise<void> => {
   const startTime = performance.now();
-
+  
   try {
     const { apiId, endpointId } = req.params;
+    
     // Check rate limiting based on IP
     const ip = req.ip || "unknown";
     const publicRateLimit = 5; // Only 5 requests per minute for public testing
-
+    
     // Validate the request body
     const validated = testRequestSchema.safeParse(req.body);
     if (!validated.success) {
       res.status(400).json({ error: validated.error.format() });
       return;
     }
-
+    
     const testRequest = validated.data as TestRequest;
 
     // Find the API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      include: {
-        endpoints: true,
-      },
+      include: { endpoints: true },
     });
-
+    
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
@@ -415,7 +462,7 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         res.status(404).json({ error: "Endpoint not found" });
         return;
       }
-
+      
       // Check if endpoint allows public testing
       if ((endpoint as any).restrictPublicTesting) {
         res.status(403).json({
@@ -448,11 +495,13 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
             };
           }
           break;
+          
         case "bearer":
           if (testRequest.auth.token && config.headers) {
             config.headers.Authorization = `Bearer ${testRequest.auth.token}`;
           }
           break;
+          
         case "apiKey":
           if (testRequest.auth.key && testRequest.auth.keyName) {
             if (testRequest.auth.in === "header" && config.headers) {
@@ -470,7 +519,7 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     let response: AxiosResponse;
     let error: { message: string; code: string } | null = null;
     let isSuccessful = false;
-
+    
     try {
       response = await axios(config);
       isSuccessful = response.status >= 200 && response.status < 300;
@@ -480,13 +529,46 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         message: axiosError.message,
         code: axiosError.code || "REQUEST_FAILED",
       };
-
+      
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
 
       // Update API analytics for failed requests
       try {
         await updateApiAnalytics(apiId, duration, false);
+        
+        // Trigger webhook for error_occurred event
+        try {
+          const webhookData = {
+            apiId,
+            event: 'error_occurred',
+            payload: {
+              endpoint: endpoint?.path || testRequest.url,
+              method: testRequest.method,
+              userType: 'anonymous',
+              ipAddress: ip,
+              responseStatus: 0,
+              errorCode: error.code,
+              errorMessage: error.message,
+              queryParams: testRequest.queryParams || {},
+              headers: Object.keys(testRequest.headers || {}).reduce((acc, key) => {
+                // Exclude sensitive headers
+                if (!key.toLowerCase().includes('auth') && !key.toLowerCase().includes('key')) {
+                  acc[key] = testRequest.headers?.[key] || '';
+                }
+                return acc;
+              }, {} as Record<string, string>),
+              isPublicTest: true,
+              timestamp: new Date().toISOString()
+            }
+          };
+          
+          // Fire and forget webhook trigger
+          triggerWebhooks(webhookData)
+            .catch(err => logger.error("Failed to trigger error webhook:", err));
+        } catch (webhookError) {
+          logger.warn("Failed to trigger webhook:", webhookError);
+        }
       } catch (analyticsError) {
         logger.warn("Failed to update API analytics for failed request:", analyticsError);
       }
@@ -519,6 +601,38 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
     // Update API analytics for successful requests
     try {
       await updateApiAnalytics(apiId, duration, true);
+      
+      // Trigger webhook for api_call event
+      try {
+        const webhookData = {
+          apiId,
+          event: 'api_call',
+          payload: {
+            endpoint: endpoint?.path || testRequest.url,
+            method: testRequest.method,
+            userType: 'anonymous',
+            ipAddress: ip,
+            responseStatus: response.status,
+            responseTime: duration,
+            queryParams: testRequest.queryParams || {},
+            headers: Object.keys(testRequest.headers || {}).reduce((acc, key) => {
+              // Exclude sensitive headers
+              if (!key.toLowerCase().includes('auth') && !key.toLowerCase().includes('key')) {
+                acc[key] = testRequest.headers?.[key] || '';
+              }
+              return acc;
+            }, {} as Record<string, string>),
+            isPublicTest: true,
+            timestamp: new Date().toISOString()
+          }
+        };
+        
+        // Fire and forget webhook trigger
+        triggerWebhooks(webhookData)
+          .catch(err => logger.error("Failed to trigger api_call webhook:", err));
+      } catch (webhookError) {
+        logger.warn("Failed to trigger webhook:", webhookError);
+      }
     } catch (analyticsError) {
       logger.warn("Failed to update API analytics for successful request:", analyticsError);
     }
@@ -529,16 +643,15 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
       await new Promise((resolve) => setTimeout(resolve, 500));
       duration += 500; // Add delay to reported duration
     }
-
+    
     // 2. Limit response size for large responses
     let responseData = response.data;
     let isTruncated = false;
-
+    
     if (responseData) {
       const responseStr = JSON.stringify(responseData);
       if (responseStr.length > 5000) {
         isTruncated = true;
-
         // For JSON responses, truncate in a structured way
         if (typeof responseData === "object" && responseData !== null) {
           if (Array.isArray(responseData)) {
@@ -553,26 +666,25 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
               if (depth > 2) return { _truncated: true };
               const result: Record<string, any> = {};
               let i = 0;
-
+              
               for (const [key, val] of Object.entries(obj)) {
                 if (i++ > 10) {
                   result._moreProps = `${Object.keys(obj).length - 10} more properties`;
                   break;
                 }
-
+                
                 if (typeof val === "object" && val !== null) {
                   result[key] = truncateObject(val, depth + 1);
                 } else {
                   result[key] = val;
                 }
               }
-
               return result;
             };
-
+            
             responseData = truncateObject(responseData);
           }
-
+          
           // Add message about truncation
           if (typeof responseData === "object" && responseData !== null) {
             responseData._publicTestLimitation = "Response truncated. Purchase API for full response.";
@@ -593,10 +705,9 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         statusText: response.statusText,
         headers: response.headers as Record<string, string | string[]>,
         data: responseData,
-        size:
-          typeof responseData === "object"
-            ? JSON.stringify(responseData).length
-            : String(responseData).length,
+        size: typeof responseData === "object"
+          ? JSON.stringify(responseData).length
+          : String(responseData).length,
       },
       request: {
         method: config.method || "",
@@ -612,11 +723,33 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         rateLimit: publicRateLimit,
       },
     };
-
+    
     res.status(200).json(result);
   } catch (error) {
     logger.error("Error in public API test:", error);
     res.status(500).json({ error: "Failed to execute public API test" });
+    
+    // Try to trigger an error webhook if apiId is available
+    if (req.params.apiId) {
+      try {
+        triggerWebhooks({
+          apiId: req.params.apiId,
+          event: 'error_occurred',
+          payload: {
+            errorCode: 500,
+            errorMessage: "Internal server error during public API test",
+            endpoint: req.params.endpointId || "unknown",
+            method: req.body?.method || "unknown",
+            userType: 'anonymous',
+            ipAddress: req.ip || "unknown",
+            isPublicTest: true,
+            timestamp: new Date().toISOString()
+          }
+        }).catch(err => logger.error("Failed to trigger error webhook:", err));
+      } catch (webhookError) {
+        logger.error("Failed to trigger webhook for error:", webhookError);
+      }
+    }
   }
 };
 

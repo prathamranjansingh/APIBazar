@@ -1005,9 +1005,7 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
     // Check if API exists
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      include: {
-        owner: true
-      }
+      include: { owner: true }
     });
 
     if (!api) {
@@ -1106,18 +1104,33 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
       logger.error(`Failed to create notifications for API purchase: ${err}`);
     });
 
-    // Trigger webhooks in background
-    triggerWebhooks({
-      apiId,
-      event: "API_PURCHASED",
-      payload: {
+    // Enhanced webhook payload
+    try {
+      // Trigger webhooks in background with more detailed information
+      triggerWebhooks({
         apiId,
-        buyerId: user.id,
-        transactionId: transaction.id
-      }
-    }).catch(err => {
-      logger.error(`Failed to trigger webhooks for API purchase: ${err}`);
-    });
+        event: "subscription_updated", // Use standard event name for subscriptions
+        payload: {
+          action: "created",
+          subscriptionId: purchase.id,
+          userId: user.id,
+          userName: user.name || user.email,
+          apiId,
+          apiName: api.name,
+          transactionId: transaction.id,
+          amount: transaction.amount,
+          currency: "USD", // Or your platform's currency
+          timestamp: new Date().toISOString(),
+          plan: api.pricingModel,
+          status: "active"
+        }
+      }).catch(err => {
+        logger.error(`Failed to trigger webhooks for API purchase: ${err}`);
+      });
+    } catch (webhookError) {
+      // Don't let webhook failures affect the main flow
+      logger.error(`Error preparing webhook for API purchase: ${webhookError}`);
+    }
 
     res.status(201).json({
       message: "API purchased successfully",
@@ -1130,6 +1143,24 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response): Pro
   } catch (error) {
     logger.error("Error purchasing API:", error);
     res.status(500).json({ error: "Failed to purchase API" });
+
+    // Attempt to log an error webhook
+    try {
+      if (apiId) {
+        triggerWebhooks({
+          apiId,
+          event: "error_occurred",
+          payload: {
+            errorCode: "PURCHASE_FAILED",
+            errorMessage: "Failed to complete API purchase transaction",
+            userId: req.auth?.sub,
+            timestamp: new Date().toISOString()
+          }
+        }).catch(err => logger.error("Failed to send error webhook:", err));
+      }
+    } catch (webhookError) {
+      logger.error("Failed to trigger error webhook:", webhookError);
+    }
   }
 };
 
