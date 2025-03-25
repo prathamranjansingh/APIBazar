@@ -66,6 +66,7 @@ model Api {
   purchasedBy  PurchasedAPI[]
   apiKeys      ApiKey[]
   webhooks     Webhook[]
+  callLogs ApiCallLog[]
 }
 
 enum PricingModel {
@@ -105,6 +106,27 @@ model ApiAnalytics {
   lastUpdated     DateTime @updatedAt
 
   @@index([apiId])
+}
+
+model ApiCallLog {
+  id           String   @id @default(uuid())
+  apiId        String
+  api          Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  timestamp    DateTime @default(now())
+  statusCode   Int
+  responseTime Float
+  endpoint     String?
+  consumerId   String?
+  country      String?
+  userAgent    String?
+  ipAddress    String?
+  errorMessage String?
+
+  @@index([apiId])
+  @@index([timestamp])
+  @@index([consumerId])
+  @@index([country])
+  @@index([endpoint])
 }
 
 // ---------------- Rate Limiting ----------------
