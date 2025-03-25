@@ -6,7 +6,7 @@ import apiKeyRoutes from "./apiKey.routes";
 import reviewRoutes from "./review.routes";
 import authRoutes from "./auth.routes";
 import apiTestRoutes from "./apiTest.routes";
-
+import analyticRoute from "./analytics.routes"
 const router = Router();
 router.use("/apis", apiRoutes);
 router.use("/users", userRoutes);
@@ -15,5 +15,6 @@ router.use("/keys", apiKeyRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/auth", authRoutes);
 router.use("/api-test", apiTestRoutes);
+router.use("/analytics", analyticRoute);
 export default router;
 
