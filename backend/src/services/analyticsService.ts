@@ -94,36 +94,34 @@ export const getAllApiAnalytics = async (
 
 export const getUserApiAnalytics = async (userId: string): Promise<(ApiAnalytics & { api: Api })[]> => {
   try {
+    console.log(`Fetching APIs for user: ${userId}`);
+
     const userApis = await prisma.api.findMany({
-      where: {
-        ownerId: userId
-      },
-      select: {
-        id: true
-      }
+      where: { ownerId: userId },
+      select: { id: true },
     });
-    
+
+    console.log(`Found APIs:`, userApis);
+
     const apiIds = userApis.map(api => api.id);
-    
     if (apiIds.length === 0) {
+      console.warn(`User ${userId} has no APIs`);
       return [];
     }
-    
-    return await prisma.apiAnalytics.findMany({
-      where: {
-        apiId: {
-          in: apiIds
-        }
-      },
-      include: {
-        api: true
-      }
+
+    const analytics = await prisma.apiAnalytics.findMany({
+      where: { apiId: { in: apiIds } },
+      include: { api: true },
     });
+
+    console.log(`Returning analytics:`, analytics);
+    return analytics;
   } catch (error) {
-    logger.error(`Error fetching analytics for user ${userId}:`, error);
+    console.error(`Error fetching analytics for user ${userId}:`, error);
     return [];
   }
 };
+
 
 export const getPurchasedApiAnalytics = async (userId: string): Promise<(ApiAnalytics & { api: Api })[]> => {
   try {
@@ -342,11 +340,56 @@ export const getCompleteApiAnalytics = async (apiId: string): Promise<CompleteAp
       prisma.apiCallLog.count({ where: { apiId, timestamp: { gte: monthStart } } }),
       prisma.apiCallLog.count({ where: { apiId, timestamp: { gte: lastMonthStart, lt: monthStart } } }),
       getApiTimeSeriesData(apiId, { period: 'day', startDate: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString() }),
-      prisma.$queryRaw<Array<StatusCodeBreakdown>>`...`,
-      prisma.$queryRaw<Array<EndpointPerformance>>`...`,
-      prisma.$queryRaw<Array<GeoDistribution>>`...`,
-      prisma.$queryRaw<Array<ConsumerAnalytics>>`...`,
-      prisma.$queryRaw<Array<{p50: number, p90: number, p95: number, p99: number}>>`...`
+      prisma.$queryRaw<Array<StatusCodeBreakdown>>`
+        SELECT 
+          "statusCode", 
+          COUNT(*) as count, 
+          (COUNT(*) * 100.0 / (SELECT COUNT(*) FROM "ApiCallLog" WHERE "apiId" = ${apiId})) as percentage
+        FROM "ApiCallLog"
+        WHERE "apiId" = ${apiId}
+        GROUP BY "statusCode"
+      `,
+      prisma.$queryRaw<Array<EndpointPerformance>>`
+        SELECT 
+          endpoint, 
+          COUNT(*) as calls, 
+          AVG("responseTime") as "avgResponseTime",
+          (COUNT(*) FILTER (WHERE "statusCode" >= 400) * 100.0 / COUNT(*)) as "errorRate"
+        FROM "ApiCallLog"
+        WHERE "apiId" = ${apiId}
+        GROUP BY endpoint
+      `,
+      prisma.$queryRaw<Array<GeoDistribution>>`
+        SELECT 
+          country, 
+          COUNT(*) as calls, 
+          (COUNT(*) * 100.0 / (SELECT COUNT(*) FROM "ApiCallLog" WHERE "apiId" = ${apiId})) as percentage
+        FROM "ApiCallLog"
+        WHERE "apiId" = ${apiId}
+        GROUP BY country
+      `,
+      prisma.$queryRaw<Array<ConsumerAnalytics>>`
+        SELECT 
+          "consumerId", 
+          COUNT(*) as "totalCalls", 
+          (COUNT(*) FILTER (WHERE "statusCode" < 400) * 100.0 / COUNT(*)) as "successRate",
+          AVG("responseTime") as "avgResponseTime",
+          MAX(timestamp) as "lastUsed"
+        FROM "ApiCallLog"
+        WHERE "apiId" = ${apiId}
+        GROUP BY "consumerId"
+        ORDER BY "totalCalls" DESC
+        LIMIT 10
+      `,
+      prisma.$queryRaw<Array<{p50: number, p90: number, p95: number, p99: number}>>`
+        SELECT 
+          PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY "responseTime") as p50,
+          PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY "responseTime") as p90,
+          PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY "responseTime") as p95,
+          PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY "responseTime") as p99
+        FROM "ApiCallLog"
+        WHERE "apiId" = ${apiId}
+      `
     ]);
     
     const percentChangeDay = callsYesterday === 0 ? 100 : ((callsToday - callsYesterday) / callsYesterday) * 100;

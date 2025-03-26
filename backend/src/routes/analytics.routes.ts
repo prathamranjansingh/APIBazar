@@ -1,12 +1,17 @@
 import { Router } from 'express';
-import { checkJwt } from '../middlewares/auth';
+import { checkJwt, extractUser } from '../middlewares/auth';
 import analyticsController from '../controllers/analytics/analyticsController';
 import { apiLimiter, authLimiter } from '../middlewares/rateLimiter';
 import { checkApiOwner } from '../middlewares/analyticsMiddleware';
 
 const router = Router();
 
-router.use(checkJwt);
+router.use((req, res, next) => {
+    checkJwt(req, res, (err) => {
+      if (err) return next(err);
+      extractUser(req, res, next);
+    });
+  });
 
 // API creator routes
 router.get('/my', apiLimiter, analyticsController.getMyApiAnalytics);

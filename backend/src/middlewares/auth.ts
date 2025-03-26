@@ -12,6 +12,7 @@ const prisma = new PrismaClient();
  * Middleware to validate JWT tokens using Auth0.
  * Ensures only authenticated users can access protected routes.
  */
+
 export const checkJwt = expressjwt({
   secret: jwksRsa.expressJwtSecret({
     cache: true,
@@ -23,6 +24,43 @@ export const checkJwt = expressjwt({
   issuer: `https://${process.env.AUTH0_DOMAIN}/`,
   algorithms: ["RS256"]
 });
+declare module "express-serve-static-core" {
+  interface Request {
+    auth?: { sub: string }; // `sub` is the user ID in Auth0 JWT
+    userId?: string; // Custom property for storing user ID
+  }
+}
+
+
+export const extractUser = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.auth?.sub) {
+    return next();
+  }
+
+  try {
+    // Fetch user by auth0Id instead of UUID
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+      select: { id: true }
+    });
+
+    if (!user) {
+      console.warn(`User not found in database: ${req.auth.sub}`);
+      return res.status(401).json({
+        error: "User not found in database",
+        code: "user_not_synced"
+      });
+    }
+
+    req.userId = user.id; // Store UUID instead of auth0Id
+    next();
+  } catch (error) {
+    console.error("Error extracting user:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+
 
 export const ensureUserExists = async (
   req: AuthenticatedRequest,

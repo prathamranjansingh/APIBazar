@@ -54,7 +54,7 @@ export const isApiOwner = async (userId: string, apiId: string): Promise<boolean
       return false;
     }
   };
-  
+
 export const checkApiOwner = (async (
   req: AuthenticatedRequest,
   res: Response,
@@ -62,8 +62,9 @@ export const checkApiOwner = (async (
 ) => {
   try {
     const userId = req.userId;
+    console.log(userId);
+    
     const { apiId } = req.params;
-
     if (!userId) {
       return res.status(401).json({
         success: false,
