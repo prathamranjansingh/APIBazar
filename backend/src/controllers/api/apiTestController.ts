@@ -13,6 +13,7 @@ import {
 } from "../../config/redis";
 import crypto from 'crypto';
 import { triggerWebhooks } from '../../services/webhookService';
+import geoip from 'geoip-lite';
 
 const prisma = new PrismaClient();
 
@@ -100,35 +101,71 @@ const testRequestSchema = z.object({
 
 export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   if (!req.auth?.sub) {
+    await prisma.apiCallLog.create({
+      data: {
+        apiId: req.params.apiId,
+        statusCode: 401,
+        responseTime: 0,
+        endpoint: req.originalUrl,
+        consumerId: null,
+        country: req.ip ? geoip.lookup(req.ip)?.country || null : null,
+        userAgent: req.headers['user-agent'] || null,
+        ipAddress: req.ip,
+        errorMessage: "Unauthorized",
+      },
+    });
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
   try {
     const { apiId, endpointId } = req.params;
-    
-    // Get user from auth0Id
+
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub },
     });
-    
+
     if (!user) {
+      await prisma.apiCallLog.create({
+        data: {
+          apiId,
+          statusCode: 404,
+          responseTime: 0,
+          endpoint: req.originalUrl,
+          consumerId: null,
+          country: req.ip ? geoip.lookup(req.ip)?.country || null : null,
+          userAgent: req.headers['user-agent'] || null,
+          ipAddress: req.ip,
+          errorMessage: "User not found",
+        },
+      });
       res.status(404).json({ error: "User not found" });
       return;
     }
 
-    // Check if the user can access this API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
       include: { endpoints: true },
     });
-    
+
     if (!api) {
+      await prisma.apiCallLog.create({
+        data: {
+          apiId,
+          statusCode: 404,
+          responseTime: 0,
+          endpoint: req.originalUrl,
+          consumerId: user.id,
+          country: req.ip ? geoip.lookup(req.ip)?.country || null : null,
+          userAgent: req.headers['user-agent'] || null,
+          ipAddress: req.ip,
+          errorMessage: "API not found",
+        },
+      });
       res.status(404).json({ error: "API not found" });
       return;
     }
 
-    // User can test if they own the API or have purchased it
     let canTest = api.ownerId === user.id;
     if (!canTest) {
       const purchased = await prisma.purchasedAPI.findUnique({
@@ -136,60 +173,64 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
       });
       canTest = !!purchased;
     }
-    
+
     if (!canTest) {
-      // If user hasn't purchased, redirect to public testing endpoint
       return testPublicEndpoint(req as Request, res);
     }
 
-    // Find the specific endpoint if provided
     let endpoint: Endpoint | null = null;
     if (endpointId) {
       endpoint = api.endpoints.find((e) => e.id === endpointId) || null;
       if (!endpoint) {
+        await prisma.apiCallLog.create({
+          data: {
+            apiId,
+            statusCode: 404,
+            responseTime: 0,
+            endpoint: req.originalUrl,
+            consumerId: user.id,
+            country: req.ip ? geoip.lookup(req.ip)?.country || null : null,
+            userAgent: req.headers['user-agent'] || null,
+            ipAddress: req.ip,
+            errorMessage: "Endpoint not found",
+          },
+        });
         res.status(404).json({ error: "Endpoint not found" });
         return;
       }
     }
 
-    // Validate test request
     const validated = testRequestSchema.safeParse(req.body);
     if (!validated.success) {
+      await prisma.apiCallLog.create({
+        data: {
+          apiId,
+          statusCode: 400,
+          responseTime: 0,
+          endpoint: req.originalUrl,
+          consumerId: user.id,
+          country: req.ip ? geoip.lookup(req.ip)?.country || null : null,
+          userAgent: req.headers['user-agent'] || null,
+          ipAddress: req.ip,
+          errorMessage: "Invalid request format",
+        },
+      });
       res.status(400).json({ error: validated.error.format() });
       return;
     }
-    
+
     const testRequest = validated.data as TestRequest;
 
-    // Generate cache key for this test request
-    const cacheKey = `test-result:${apiId}:${crypto
-      .createHash("md5")
-      .update(JSON.stringify(testRequest))
-      .digest("hex")}`;
-
-    // Check if we have cached results for this exact test request
-    if (isRedisAvailable()) {
-      console.log("Cache is available");
-      const cachedResult = await getCachedData<TestResponse>(cacheKey);
-      if (cachedResult) {
-        // Return cached test result
-        res.json({ ...cachedResult, cache: "HIT" });
-        return;
-      }
-    }
-
-    // Prepare request configuration
     const config: AxiosRequestConfig = {
       method: testRequest.method,
       url: testRequest.url,
       headers: testRequest.headers || {},
       params: testRequest.queryParams || {},
       data: testRequest.body,
-      validateStatus: () => true, // Accept any status to avoid exceptions
-      timeout: testRequest.timeout || 30000, // Default 30s timeout
+      validateStatus: () => true,
+      timeout: testRequest.timeout || 30000,
     };
 
-    // Add authentication if specified
     if (testRequest.auth) {
       switch (testRequest.auth.type) {
         case "basic":
@@ -210,19 +251,17 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
             if (testRequest.auth.in === "header" && config.headers) {
               config.headers[testRequest.auth.keyName] = testRequest.auth.key;
             } else if (testRequest.auth.in === "query" && config.params) {
-              (config.params as Record<string, string>)[testRequest.auth.keyName] =
-                testRequest.auth.key;
+              (config.params as Record<string, string>)[testRequest.auth.keyName] = testRequest.auth.key;
             }
           }
           break;
       }
     }
 
-    // Execute request and measure performance
     const startTime = performance.now();
     let response: AxiosResponse;
     let error: { message: string; code: string } | null = null;
-    
+
     try {
       response = await axios(config);
     } catch (e) {
@@ -231,7 +270,6 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
         message: axiosError.message,
         code: axiosError.code || "REQUEST_FAILED",
       };
-      // Create a minimal response for the error case
       response = {
         status: 0,
         statusText: "Error",
@@ -241,94 +279,37 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
         request: {},
       } as AxiosResponse;
     }
-    
+
     const endTime = performance.now();
     const duration = Math.round(endTime - startTime);
 
-    // Update API analytics
     try {
-      // First, check if analytics record exists
-      let analytics = await prisma.apiAnalytics.findUnique({
-        where: { apiId },
-      });
-      
-      if (!analytics) {
-        // Create a new analytics record if it doesn't exist
-        analytics = await prisma.apiAnalytics.create({
-          data: {
-            apiId,
-            totalCalls: 1,
-            successCalls: error ? 0 : 1,
-            failedCalls: error ? 1 : 0,
-            responseTimeAvg: duration,
-            errorRate: error ? 1.0 : 0.0,
-          },
-        });
-      } else {
-        // Update existing analytics
-        const newTotalCalls = analytics.totalCalls + 1;
-        const newSuccessCalls = analytics.successCalls + (error ? 0 : 1);
-        const newFailedCalls = analytics.failedCalls + (error ? 1 : 0);
-        // Calculate new average response time
-        const newResponseTimeAvg =
-          (analytics.responseTimeAvg * analytics.totalCalls + duration) / newTotalCalls;
-        // Calculate new error rate
-        const newErrorRate = newFailedCalls / newTotalCalls;
-
-        await prisma.apiAnalytics.update({
-          where: { apiId },
-          data: {
-            totalCalls: newTotalCalls,
-            successCalls: newSuccessCalls,
-            failedCalls: newFailedCalls,
-            responseTimeAvg: newResponseTimeAvg,
-            errorRate: newErrorRate,
-          },
-        });
-      }
-
-      // Trigger webhook for API call event
-      const webhookData = {
-        apiId,
-        event: 'api_call',
-        payload: {
-          endpoint: endpoint?.path || testRequest.url,
-          method: testRequest.method,
-          userId: user.id,
-          userName: user.name || user.email,
-          responseStatus: response.status,
+      await prisma.apiCallLog.create({
+        data: {
+          apiId,
+          statusCode: response.status,
           responseTime: duration,
-          queryParams: testRequest.queryParams || {},
-          headers: Object.keys(testRequest.headers || {}).reduce((acc, key) => {
-            // Exclude sensitive headers like Authorization
-            if (!key.toLowerCase().includes('auth') && !key.toLowerCase().includes('key')) {
-              acc[key] = testRequest.headers?.[key] || '';
-            }
-            return acc;
-          }, {} as Record<string, string>),
-          isTest: true,
-          timestamp: new Date().toISOString()
-        }
-      };
-
-      // If there was an error, include it in the webhook payload
-      if (error) {
-        webhookData.event = 'error_occurred';
-        (webhookData.payload as any).error = {
-          code: error.code,
-          message: error.message
-        };
-      }
-
-      // Trigger webhook asynchronously (don't await)
-      triggerWebhooks(webhookData)
-        .catch((err: any) => logger.error("Failed to trigger webhook:", err));
-    } catch (analyticsError) {
-      // Log error but don't fail the request
-      logger.warn("Failed to update API analytics:", analyticsError);
+          endpoint: endpoint?.path || req.originalUrl,
+          consumerId: user?.id || null,
+          country: req.ip ? geoip.lookup(req.ip)?.country || null : null,
+          userAgent: req.headers['user-agent'] || null,
+          ipAddress: req.ip,
+          errorMessage: error?.message || null,
+        },
+      });
+    } catch (logError) {
+      logger.warn("Failed to log API call:", logError);
     }
 
-    // Prepare test result
+    // Ensure updateApiAnalytics is always called if apiId is present
+    if (apiId) {
+      try {
+        await updateApiAnalytics(apiId, duration, true);
+      } catch (analyticsError) {
+        logger.warn("Failed to update API analytics:", analyticsError);
+      }
+    }
+
     let result: TestResponse;
     if (error) {
       result = {
@@ -345,15 +326,9 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
         cache: "MISS",
       };
     } else {
-      // Transform headers to match the expected type
       const headers: Record<string, string | string[]> = {};
       for (const [key, value] of Object.entries(response.headers)) {
-        if (typeof value === "string" || Array.isArray(value)) {
-          headers[key] = value;
-        } else if (value !== undefined) {
-          // Convert non-string values to strings
-          headers[key] = String(value);
-        }
+        headers[key] = typeof value === "string" || Array.isArray(value) ? value : String(value);
       }
 
       result = {
@@ -362,7 +337,7 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
         response: {
           status: response.status,
           statusText: response.statusText,
-          headers, // Use the transformed headers
+          headers,
           data: response.data,
           size: JSON.stringify(response.data || "").length,
         },
@@ -377,40 +352,15 @@ export const testEndpoint = async (req: AuthenticatedRequest, res: Response): Pr
       };
     }
 
-    // Cache test results for successful queries
-    if (isRedisAvailable() && !error) {
-      // Cache test results for a short period (1 minute)
-      await cacheData(cacheKey, result, CACHE_TTL.SHORT).catch((err) => {
-        logger.warn(`Failed to cache test result: ${err}`);
-      });
-    }
-
     res.json(result);
   } catch (error) {
     logger.error("Error testing endpoint:", error);
     res.status(500).json({ error: "Failed to execute API test" });
-    
-    // Optionally trigger error_occurred webhook for unexpected errors
-    if (req.params.apiId) {
-      try {
-        triggerWebhooks({
-          apiId: req.params.apiId,
-          event: 'error_occurred',
-          payload: {
-            errorCode: 500,
-            errorMessage: "Internal server error during API test",
-            endpoint: req.params.endpointId || "unknown",
-            method: req.body?.method || "unknown",
-            userId: req.auth?.sub || "unknown",
-            timestamp: new Date().toISOString()
-          }
-        }).catch((err: any) => logger.error("Failed to trigger error webhook:", err));
-      } catch (webhookError) {
-        logger.error("Failed to trigger webhook for error:", webhookError);
-      }
-    }
   }
 };
+
+
+
 
 /**
  * Test API for unauthenticated users or users who haven't purchased the API
@@ -420,32 +370,27 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
   
   try {
     const { apiId, endpointId } = req.params;
-    
-    // Check rate limiting based on IP
     const ip = req.ip || "unknown";
-    const publicRateLimit = 5; // Only 5 requests per minute for public testing
-    
-    // Validate the request body
+    const publicRateLimit = 5;
+
     const validated = testRequestSchema.safeParse(req.body);
     if (!validated.success) {
       res.status(400).json({ error: validated.error.format() });
       return;
     }
-    
+
     const testRequest = validated.data as TestRequest;
 
-    // Find the API
     const api = await prisma.api.findUnique({
       where: { id: apiId },
       include: { endpoints: true },
     });
-    
+
     if (!api) {
       res.status(404).json({ error: "API not found" });
       return;
     }
 
-    // Check if the API allows public testing
     if (api.pricingModel === "PAID" && !(api as any).allowPublicTesting) {
       res.status(403).json({
         error: "This API requires purchase before testing",
@@ -454,7 +399,6 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    // Find the specific endpoint if provided
     let endpoint = null;
     if (endpointId) {
       endpoint = api.endpoints.find((e) => e.id === endpointId) || null;
@@ -462,8 +406,7 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         res.status(404).json({ error: "Endpoint not found" });
         return;
       }
-      
-      // Check if endpoint allows public testing
+
       if ((endpoint as any).restrictPublicTesting) {
         res.status(403).json({
           error: "This endpoint requires purchase",
@@ -473,18 +416,16 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
       }
     }
 
-    // Prepare request configuration
     const config: AxiosRequestConfig = {
       method: testRequest.method,
       url: testRequest.url,
       headers: testRequest.headers || {},
       params: testRequest.queryParams || {},
       data: testRequest.body,
-      validateStatus: () => true, // Accept any status to avoid exceptions
-      timeout: 15000, // 15 seconds timeout (shorter than for paid users)
+      validateStatus: () => true,
+      timeout: 15000,
     };
 
-    // Add authentication if specified
     if (testRequest.auth) {
       switch (testRequest.auth.type) {
         case "basic":
@@ -495,13 +436,11 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
             };
           }
           break;
-          
         case "bearer":
           if (testRequest.auth.token && config.headers) {
             config.headers.Authorization = `Bearer ${testRequest.auth.token}`;
           }
           break;
-          
         case "apiKey":
           if (testRequest.auth.key && testRequest.auth.keyName) {
             if (testRequest.auth.in === "header" && config.headers) {
@@ -515,11 +454,10 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
       }
     }
 
-    // Execute request and measure performance
     let response: AxiosResponse;
     let error: { message: string; code: string } | null = null;
     let isSuccessful = false;
-    
+
     try {
       response = await axios(config);
       isSuccessful = response.status >= 200 && response.status < 300;
@@ -529,49 +467,33 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         message: axiosError.message,
         code: axiosError.code || "REQUEST_FAILED",
       };
-      
+
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
 
-      // Update API analytics for failed requests
-      try {
-        await updateApiAnalytics(apiId, duration, false);
-        
-        // Trigger webhook for error_occurred event
-        try {
-          const webhookData = {
-            apiId,
-            event: 'error_occurred',
-            payload: {
-              endpoint: endpoint?.path || testRequest.url,
-              method: testRequest.method,
-              userType: 'anonymous',
-              ipAddress: ip,
-              responseStatus: 0,
-              errorCode: error.code,
-              errorMessage: error.message,
-              queryParams: testRequest.queryParams || {},
-              headers: Object.keys(testRequest.headers || {}).reduce((acc, key) => {
-                // Exclude sensitive headers
-                if (!key.toLowerCase().includes('auth') && !key.toLowerCase().includes('key')) {
-                  acc[key] = testRequest.headers?.[key] || '';
-                }
-                return acc;
-              }, {} as Record<string, string>),
-              isPublicTest: true,
-              timestamp: new Date().toISOString()
+      await updateApiAnalytics(apiId, duration, false);
+
+      await prisma.apiCallLog.create({
+        data: {
+          apiId,
+          statusCode: 0,
+          responseTime: duration,
+          endpoint: endpoint?.path || req.originalUrl,
+          consumerId: null,
+          country: (() => {
+            try {
+              const geo = ip ? geoip.lookup(ip) : null;
+              return geo ? geo.country : null;
+            } catch (error) {
+              console.error("Error getting geolocation:", error);
+              return null;
             }
-          };
-          
-          // Fire and forget webhook trigger
-          triggerWebhooks(webhookData)
-            .catch(err => logger.error("Failed to trigger error webhook:", err));
-        } catch (webhookError) {
-          logger.warn("Failed to trigger webhook:", webhookError);
-        }
-      } catch (analyticsError) {
-        logger.warn("Failed to update API analytics for failed request:", analyticsError);
-      }
+          })(),
+          userAgent: req.headers["user-agent"] || null,
+          ipAddress: ip,
+          errorMessage: error?.message || "Request failed",
+        },
+      });
 
       res.status(200).json({
         success: false,
@@ -594,85 +516,60 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    // Calculate duration
     const endTime = performance.now();
     let duration = Math.round(endTime - startTime);
 
-    // Update API analytics for successful requests
-    try {
-      await updateApiAnalytics(apiId, duration, true);
-      
-      // Trigger webhook for api_call event
-      try {
-        const webhookData = {
-          apiId,
-          event: 'api_call',
-          payload: {
-            endpoint: endpoint?.path || testRequest.url,
-            method: testRequest.method,
-            userType: 'anonymous',
-            ipAddress: ip,
-            responseStatus: response.status,
-            responseTime: duration,
-            queryParams: testRequest.queryParams || {},
-            headers: Object.keys(testRequest.headers || {}).reduce((acc, key) => {
-              // Exclude sensitive headers
-              if (!key.toLowerCase().includes('auth') && !key.toLowerCase().includes('key')) {
-                acc[key] = testRequest.headers?.[key] || '';
-              }
-              return acc;
-            }, {} as Record<string, string>),
-            isPublicTest: true,
-            timestamp: new Date().toISOString()
-          }
-        };
-        
-        // Fire and forget webhook trigger
-        triggerWebhooks(webhookData)
-          .catch(err => logger.error("Failed to trigger api_call webhook:", err));
-      } catch (webhookError) {
-        logger.warn("Failed to trigger webhook:", webhookError);
-      }
-    } catch (analyticsError) {
-      logger.warn("Failed to update API analytics for successful request:", analyticsError);
-    }
+    await updateApiAnalytics(apiId, duration, true);
 
-    // For public testing, apply limitations:
-    // 1. Add artificial delay to show performance benefits of purchasing
+    await prisma.apiCallLog.create({
+      data: {
+        apiId,
+        statusCode: response.status,
+        responseTime: duration,
+        endpoint: endpoint?.path || req.originalUrl,
+        consumerId: null,
+        country: (() => {
+          try {
+            const geo = ip ? geoip.lookup(ip) : null;
+            return geo ? geo.country : null;
+          } catch (error) {
+            console.error("Error getting geolocation:", error);
+            return null;
+          }
+        })(),
+        userAgent: req.headers["user-agent"] || null,
+        ipAddress: ip,
+        errorMessage: null,
+      },
+    });
+
     if (api.pricingModel === "PAID") {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      duration += 500; // Add delay to reported duration
+      duration += 500;
     }
-    
-    // 2. Limit response size for large responses
+
     let responseData = response.data;
     let isTruncated = false;
-    
+
     if (responseData) {
       const responseStr = JSON.stringify(responseData);
       if (responseStr.length > 5000) {
         isTruncated = true;
-        // For JSON responses, truncate in a structured way
         if (typeof responseData === "object" && responseData !== null) {
           if (Array.isArray(responseData)) {
-            // For arrays, just take the first few items
             responseData = responseData.slice(0, 3);
           } else {
-            // For objects, keep the structure but limit nested objects
-            const truncateObject = (
-              obj: Record<string, any>,
-              depth: number = 0
-            ): Record<string, any> => {
+            const truncateObject = (obj: Record<string, any>, depth: number = 0): Record<string, any> => {
               if (depth > 2) return { _truncated: true };
               const result: Record<string, any> = {};
               let i = 0;
-              
+
               for (const [key, val] of Object.entries(obj)) {
                 if (i++ > 10) {
                   result._moreProps = `${Object.keys(obj).length - 10} more properties`;
                   break;
                 }
-                
+
                 if (typeof val === "object" && val !== null) {
                   result[key] = truncateObject(val, depth + 1);
                 } else {
@@ -681,23 +578,20 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
               }
               return result;
             };
-            
+
             responseData = truncateObject(responseData);
           }
-          
-          // Add message about truncation
+
           if (typeof responseData === "object" && responseData !== null) {
             responseData._publicTestLimitation = "Response truncated. Purchase API for full response.";
           }
         } else {
-          // For non-JSON responses, truncate with a message
           responseData = responseStr.substring(0, 5000) + "... [Response truncated for free testing]";
         }
       }
     }
 
-    // Format the response
-    const result: TestResponse = {
+    res.status(200).json({
       success: isSuccessful,
       duration,
       response: {
@@ -722,34 +616,9 @@ export const testPublicEndpoint = async (req: Request, res: Response): Promise<v
         message: "You're testing with free limitations. Purchase for full access.",
         rateLimit: publicRateLimit,
       },
-    };
-    
-    res.status(200).json(result);
+    });
   } catch (error) {
-    logger.error("Error in public API test:", error);
     res.status(500).json({ error: "Failed to execute public API test" });
-    
-    // Try to trigger an error webhook if apiId is available
-    if (req.params.apiId) {
-      try {
-        triggerWebhooks({
-          apiId: req.params.apiId,
-          event: 'error_occurred',
-          payload: {
-            errorCode: 500,
-            errorMessage: "Internal server error during public API test",
-            endpoint: req.params.endpointId || "unknown",
-            method: req.body?.method || "unknown",
-            userType: 'anonymous',
-            ipAddress: req.ip || "unknown",
-            isPublicTest: true,
-            timestamp: new Date().toISOString()
-          }
-        }).catch(err => logger.error("Failed to trigger error webhook:", err));
-      } catch (webhookError) {
-        logger.error("Failed to trigger webhook for error:", webhookError);
-      }
-    }
   }
 };
 
