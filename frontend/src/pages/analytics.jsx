@@ -184,22 +184,7 @@ const Analytics = () => {
     linkElement.click();
   };
 
-  // Export analytics as CSV
-  const handleExportCsv = () => {
-    if (!analytics) return;
-    // Basic csv conversion for time series data
-    const headers = 'Date,Total Calls,Success Calls,Failed Calls,Error Rate,Avg Response Time\n';
-    const csvData = analytics.timeSeries.map(point =>
-      `${point.timestamp},${point.calls},${point.successCalls},${point.failedCalls},${point.errorRate},${point.avgResponseTime}`
-    ).join('\n');
-    const csv = headers + csvData;
-    const dataUri = 'data:text/csv;charset=utf-8,'+ encodeURIComponent(csv);
-    const exportFileDefaultName = `api-analytics-${selectedApi.api.name}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
+  
 
   // Filter APIs by search term
   const filteredApis = apis.filter(api =>
@@ -236,15 +221,6 @@ const Analytics = () => {
           >
             <FileJson className="w-4 h-4 mr-2" />
             Export JSON
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportCsv}
-            disabled={!analytics}
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Export CSV
           </Button>
         </div>
       </div>

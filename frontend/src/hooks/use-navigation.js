@@ -12,7 +12,6 @@ export function useNavigation() {
     { name: "My APIs", path: "/apis", icon: Code2 },
     { name: "Analytics", path: "/analytics", icon: BarChart3 },
     { name: "Marketplace", path: "/marketplace", icon: ShoppingBag },
-    { name: "API Keys", path: "/keys", icon: Key },
   ], []);
 
   const isPathActive = (path) => {
