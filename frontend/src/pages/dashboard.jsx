@@ -146,7 +146,7 @@ function Dashboard() {
     <div className="space-y-6 w-full font-bricolage h-full">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-bold tracking-tight">Welcome back, {user?.name}</h2>
-        <Button onClick={() => navigate("/dashboard/create-api")}>
+        <Button onClick={() => navigate("/apis/create")}>
           <Plus className="mr-2 h-4 w-4" /> Create API
         </Button>
       </div>
