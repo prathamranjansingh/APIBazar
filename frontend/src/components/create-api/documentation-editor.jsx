@@ -1,14 +1,15 @@
-// src/components/create-api/documentation-editor.jsx
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Bold, Italic, Link, List, ListOrdered, Heading1, Heading2, Code, Quote, Image } from "lucide-react";
+import {
+  Bold, Italic, Link, List, ListOrdered, Heading1, Heading2, Code, Quote, Image,
+} from "lucide-react";
 
 function DocumentationEditor({ formData, updateFormData, setEditorRef }) {
   const editorRef = useRef(null);
+  const [error, setError] = useState("");
 
-  // Initialize the editor with existing content and pass the ref to the parent
   useEffect(() => {
     if (editorRef.current && formData.documentation) {
       editorRef.current.innerHTML = formData.documentation;
@@ -18,13 +19,11 @@ function DocumentationEditor({ formData, updateFormData, setEditorRef }) {
     }
   }, [formData.documentation, setEditorRef]);
 
-  // Function to execute a formatting command
   const execCommand = (command, value = null) => {
     document.execCommand(command, false, value);
     editorRef.current.focus();
   };
 
-  // Insert a code block
   const insertCodeBlock = () => {
     const selection = window.getSelection();
     const text = selection.toString();
@@ -35,7 +34,6 @@ function DocumentationEditor({ formData, updateFormData, setEditorRef }) {
     editorRef.current.focus();
   };
 
-  // Insert an example request
   const insertRequestExample = () => {
     const template = `
 <div class="border rounded-md p-4 my-4">
@@ -51,7 +49,6 @@ curl -X GET "${formData.baseUrl}/endpoint" \\
     editorRef.current.focus();
   };
 
-  // Insert an example response
   const insertResponseExample = () => {
     const template = `
 <div class="border rounded-md p-4 my-4">
@@ -72,21 +69,19 @@ curl -X GET "${formData.baseUrl}/endpoint" \\
     editorRef.current.focus();
   };
 
-  // Insert a visual divider
   const insertDivider = () => {
     document.execCommand("insertHTML", false, '<hr class="my-6 border-t-2 border-muted">');
     editorRef.current.focus();
   };
 
-  // Insert endpoint documentation based on defined endpoints
   const insertEndpointDocs = () => {
     if (!formData.endpoints || formData.endpoints.length === 0) {
-      alert("No endpoints have been defined yet.");
+      setError("No endpoints defined yet.");
       return;
     }
 
     let endpointsHtml = '<div class="my-6"><h2 class="text-xl font-bold mb-4">API Endpoints</h2>';
-    formData.endpoints.forEach((endpoint, index) => {
+    formData.endpoints.forEach((endpoint) => {
       const methodColorClass = {
         GET: "bg-green-100 text-green-800",
         POST: "bg-blue-100 text-blue-800",
@@ -104,8 +99,7 @@ curl -X GET "${formData.baseUrl}/endpoint" \\
   ${endpoint.description ? `<p class="mb-3 text-muted-foreground">${endpoint.description}</p>` : ""}
 `;
 
-      // Parameters section
-      if (endpoint.parameters && endpoint.parameters.length > 0) {
+      if (endpoint.parameters?.length) {
         endpointsHtml += `
   <div class="mt-4">
     <h4 class="text-sm font-semibold mb-2">Parameters</h4>
@@ -121,47 +115,48 @@ curl -X GET "${formData.baseUrl}/endpoint" \\
       <div>${param.description || "-"}</div>
 `;
         });
-        endpointsHtml += `
-    </div>
-  </div>
-`;
+        endpointsHtml += `</div></div>`;
       }
 
-      // Request body section
       if (endpoint.requestBody) {
         endpointsHtml += `
   <div class="mt-4">
     <h4 class="text-sm font-semibold mb-2">Request Body</h4>
     <pre class="bg-muted p-3 rounded-md overflow-x-auto font-mono text-sm">${JSON.stringify(
-      JSON.parse(endpoint.requestBody),
-      null,
-      2
+      JSON.parse(endpoint.requestBody), null, 2
     )}</pre>
-  </div>
-`;
+  </div>`;
       }
 
-      // Response example section
       if (endpoint.responseExample) {
         endpointsHtml += `
   <div class="mt-4">
     <h4 class="text-sm font-semibold mb-2">Response</h4>
     <pre class="bg-muted p-3 rounded-md overflow-x-auto font-mono text-sm">${JSON.stringify(
-      JSON.parse(endpoint.responseExample),
-      null,
-      2
+      JSON.parse(endpoint.responseExample), null, 2
     )}</pre>
-  </div>
-`;
+  </div>`;
       }
 
-      endpointsHtml += `
-</div>
-`;
+      endpointsHtml += `</div>`;
     });
     endpointsHtml += "</div>";
     document.execCommand("insertHTML", false, endpointsHtml);
     editorRef.current.focus();
+  };
+
+  const validateAndUpdate = () => {
+    if (!editorRef.current) return;
+
+    const plainText = editorRef.current.innerText || "";
+    const wordCount = plainText.trim().split(/\s+/).filter(Boolean).length;
+
+    if (wordCount < 10) {
+      setError("Documentation must contain at least 10 words.");
+    } else {
+      setError("");
+      updateFormData({ documentation: editorRef.current.innerHTML });
+    }
   };
 
   return (
@@ -177,79 +172,46 @@ curl -X GET "${formData.baseUrl}/endpoint" \\
       {/* Editor Toolbar */}
       <Card className="p-1 border">
         <div className="bg-muted p-2 flex flex-wrap gap-1 border-b">
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("bold")}>
-            <Bold className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("italic")}>
-            <Italic className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const url = prompt("Enter link URL:");
-              if (url) execCommand("createLink", url);
-            }}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("bold")}><Bold className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("italic")}><Italic className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => {
+            const url = prompt("Enter link URL:");
+            if (url) execCommand("createLink", url);
+          }}>
             <Link className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("insertUnorderedList")}>
-            <List className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("insertOrderedList")}>
-            <ListOrdered className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<h2>")}>
-            <Heading1 className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<h3>")}>
-            <Heading2 className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={insertCodeBlock}>
-            <Code className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<blockquote>")}>
-            <Quote className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              const url = prompt("Enter image URL:");
-              if (url) execCommand("insertImage", url);
-            }}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("insertUnorderedList")}><List className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("insertOrderedList")}><ListOrdered className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<h2>")}><Heading1 className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<h3>")}><Heading2 className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertCodeBlock}><Code className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => execCommand("formatBlock", "<blockquote>")}><Quote className="h-4 w-4" /></Button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => {
+            const url = prompt("Enter image URL:");
+            if (url) execCommand("insertImage", url);
+          }}>
             <Image className="h-4 w-4" />
           </Button>
           <div className="h-4 border-r mx-1"></div>
-          <Button type="button" variant="ghost" size="sm" onClick={insertRequestExample}>
-            Request Example
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={insertResponseExample}>
-            Response Example
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={insertDivider}>
-            Divider
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={insertEndpointDocs}>
-            Insert Endpoints
-          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertRequestExample}>Request Example</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertResponseExample}>Response Example</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertDivider}>Divider</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={insertEndpointDocs}>Insert Endpoints</Button>
         </div>
 
         {/* Editor Content */}
-        <div
-          ref={editorRef}
-          className="min-h-[400px] p-4 prose prose-sm max-w-none focus:outline-none"
-          contentEditable
-          dangerouslySetInnerHTML={{ __html: formData.documentation || "<p>Start documenting your API here...</p>" }}
-          onBlur={() => {
-            if (editorRef.current) {
-              updateFormData({ documentation: editorRef.current.innerHTML });
-            }
-          }}
-        />
+        <div>
+          <div
+            ref={editorRef}
+            className="min-h-[400px] p-4 prose prose-sm max-w-none focus:outline-none"
+            contentEditable
+            dangerouslySetInnerHTML={{
+              __html: formData.documentation || "<p>Start documenting your API here...</p>",
+            }}
+            onBlur={validateAndUpdate}
+          />
+          {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
+        </div>
       </Card>
 
       {/* Documentation Tips */}

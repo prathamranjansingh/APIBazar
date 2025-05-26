@@ -1,4 +1,3 @@
-// src/components/create-api/endpoints-form.jsx
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +34,7 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
     request: false,
     response: false,
   });
+  const [showDescriptionError, setShowDescriptionError] = useState(false);
 
   const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"];
 
@@ -48,11 +48,13 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
     const { name, value } = e.target;
     setFormValues((prev) => ({ ...prev, [name]: value }));
 
-    // Clear JSON validation errors when editing
+    // Clear validation errors when editing
     if (name === "requestBody") {
       setShowJsonError((prev) => ({ ...prev, request: false }));
     } else if (name === "responseExample") {
       setShowJsonError((prev) => ({ ...prev, response: false }));
+    } else if (name === "description") {
+      setShowDescriptionError(false);
     }
   };
 
@@ -112,16 +114,39 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
     }
   };
 
+  // Validate description word count
+  const validateDescription = (description) => {
+    if (!description.trim()) {
+      setShowDescriptionError(true);
+      return false;
+    }
+    
+    const wordCount = description.trim().split(/\s+/).length;
+    if (wordCount < 10) {
+      setShowDescriptionError(true);
+      return false;
+    }
+    
+    return true;
+  };
+
+  // Get word count for description
+  const getDescriptionWordCount = (description) => {
+    if (!description.trim()) return 0;
+    return description.trim().split(/\s+/).length;
+  };
+
   // Add a new endpoint
   const handleAddEndpoint = () => {
     if (!formValues.path.trim()) {
       return;
     }
 
+    const isDescriptionValid = validateDescription(formValues.description);
     const isRequestValid = validateJson(formValues.requestBody, "request");
     const isResponseValid = validateJson(formValues.responseExample, "response");
 
-    if (!isRequestValid || !isResponseValid) {
+    if (!isDescriptionValid || !isRequestValid || !isResponseValid) {
       return;
     }
 
@@ -150,6 +175,7 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
       request: false,
       response: false,
     });
+    setShowDescriptionError(false);
   };
 
   // Start editing an endpoint
@@ -160,6 +186,7 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
       request: false,
       response: false,
     });
+    setShowDescriptionError(false);
   };
 
   // Cancel editing
@@ -179,6 +206,7 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
       request: false,
       response: false,
     });
+    setShowDescriptionError(false);
   };
 
   // Save edited endpoint
@@ -187,10 +215,11 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
       return;
     }
 
+    const isDescriptionValid = validateDescription(formValues.description);
     const isRequestValid = validateJson(formValues.requestBody, "request");
     const isResponseValid = validateJson(formValues.responseExample, "response");
 
-    if (!isRequestValid || !isResponseValid) {
+    if (!isDescriptionValid || !isRequestValid || !isResponseValid) {
       return;
     }
 
@@ -214,6 +243,7 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
       responseExample: "",
       rateLimit: null,
     });
+    setShowDescriptionError(false);
   };
 
   // Get method color for badges
@@ -297,15 +327,34 @@ function EndpointsForm({ endpoints, addEndpoint, removeEndpoint, updateEndpoint,
 
         {/* Endpoint Description */}
         <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">
+            Description <span className="text-destructive">*</span>
+          </Label>
           <Textarea
             id="description"
             name="description"
-            placeholder="Describe what this endpoint does..."
+            placeholder="Describe what this endpoint does in detail. Include information about its purpose, expected behavior, and any important notes about its usage..."
             value={formValues.description}
             onChange={handleInputChange}
             rows={3}
+            className={showDescriptionError ? "border-red-500" : ""}
           />
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-muted-foreground">
+              Must contain at least 10 words to provide adequate documentation
+            </p>
+            <span className={`text-sm ${getDescriptionWordCount(formValues.description) < 10 ? 'text-red-500' : 'text-muted-foreground'}`}>
+              {getDescriptionWordCount(formValues.description)}/10 words
+            </span>
+          </div>
+          {showDescriptionError && (
+            <Alert variant="destructive" className="mt-2">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Description must contain at least 10 words. Currently has {getDescriptionWordCount(formValues.description)} words.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* Rate Limit */}

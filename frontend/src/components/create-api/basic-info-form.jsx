@@ -1,9 +1,32 @@
+import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function BasicInfoForm({ formData, handleChange, categories, updateFormData }) {
+  const [errors, setErrors] = useState({});
+
+  const validateField = (name, value) => {
+    const newErrors = { ...errors };
+
+    if (name === "description") {
+      if (!value || value.trim().length < 10) {
+        newErrors.description = "Description must be at least 10 characters long.";
+      } else {
+        delete newErrors.description;
+      }
+    }
+
+    setErrors(newErrors);
+  };
+
   return (
     <>
       {/* API Name Field */}
@@ -40,7 +63,9 @@ function BasicInfoForm({ formData, handleChange, categories, updateFormData }) {
 
       {/* Category Field */}
       <div className="space-y-2">
-        <Label htmlFor="category">Category <span className="text-destructive">*</span></Label>
+        <Label htmlFor="category">
+          Category <span className="text-destructive">*</span>
+        </Label>
         <Select
           value={formData.category}
           onValueChange={(value) => updateFormData({ category: value })}
@@ -59,7 +84,7 @@ function BasicInfoForm({ formData, handleChange, categories, updateFormData }) {
         <p className="text-sm text-muted-foreground">Categorizing your API helps users discover it more easily</p>
       </div>
 
-      {/* Description Field */}
+      {/* Description Field with Validation */}
       <div className="space-y-2">
         <Label htmlFor="description">
           Description <span className="text-destructive">*</span>
@@ -69,11 +94,20 @@ function BasicInfoForm({ formData, handleChange, categories, updateFormData }) {
           name="description"
           placeholder="Describe what your API does and the problems it solves..."
           value={formData.description}
-          onChange={handleChange}
+          onChange={(e) => {
+            handleChange(e);
+            validateField("description", e.target.value);
+          }}
+          onBlur={(e) => validateField("description", e.target.value)}
           rows={4}
           required
         />
-        <p className="text-sm text-muted-foreground">This will be displayed in API listings and search results</p>
+        {errors.description && (
+          <p className="text-sm text-red-500">{errors.description}</p>
+        )}
+        <p className="text-sm text-muted-foreground">
+          This will be displayed in API listings and search results
+        </p>
       </div>
     </>
   );

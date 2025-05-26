@@ -185,13 +185,10 @@ function CreateApi() {
         baseUrl: formData.baseUrl,
         rateLimit: parseInt(formData.rateLimit),
       };
-
-      // Step 1: Create the API using the proper endpoint
+      
       const apiResponse = await post(`${API_BASE_URL}/apis`, apiData, { requireAuth: true });
       const newApi = apiResponse.data;
 
-      // Step 2: If API has endpoints, create them
-      // Step 2: If API has endpoints, create them
       // Inside handleSubmit function
 // If API has endpoints, create them
 if (formData.endpoints.length > 0) {
