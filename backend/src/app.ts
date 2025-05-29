@@ -10,7 +10,11 @@ const app = express();
 
 // Middleware
 app.use(helmet()); // Security headers
-app.use(cors()); // Allow cross-origin requests
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  })
+);
 app.use(express.json()); // Parse JSON requests
 app.use(morgan("combined", { stream: logStream })); // Request logging
 
