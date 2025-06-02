@@ -16,6 +16,7 @@ import {
 } from "../../config/redis";
 import Razorpay from "razorpay";
 import crypto from "crypto";
+import { generateApiKey } from "../../utils/helpers";
 
 const prisma = new PrismaClient();
 const razorpay = new Razorpay({
@@ -1060,206 +1061,118 @@ export const deleteEndpoint = async (
  * Purchase an API and update relevant caches
  */
 
-export const purchaseApi = async (
-  req: AuthenticatedRequest,
-  res: Response
-): Promise<void> => {
-  if (!req.auth?.sub) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
+export const purchaseApi = async (req: any, res: any) => {
+  const userId = req.user.id;
   const { apiId } = req.params;
-  // CHANGE 2: Extract payment details from request body for paid APIs
   const { razorpay_payment_id, razorpay_order_id, razorpay_signature } =
     req.body;
 
   try {
-    // Get user from auth0Id
-    const user = await prisma.user.findUnique({
-      where: { auth0Id: req.auth.sub },
-    });
-
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
-    // Check if API exists
     const api = await prisma.api.findUnique({
       where: { id: apiId },
       include: { owner: true },
     });
 
-    if (!api) {
-      res.status(404).json({ error: "API not found" });
-      return;
-    }
+    if (!api) return res.status(404).json({ error: "API not found" });
 
-    // Check if user already purchased this API
-    const existingPurchase = await prisma.purchasedAPI.findUnique({
+    if (api.ownerId === userId)
+      return res
+        .status(400)
+        .json({ error: "You cannot purchase your own API" });
+
+    // Check if already purchased
+    const existingPurchase = await prisma.purchasedAPI.findFirst({
       where: {
-        userId_apiId: {
-          userId: user.id,
-          apiId,
-        },
+        userId,
+        apiId,
       },
     });
 
-    if (existingPurchase) {
-      res.status(400).json({ error: "You have already purchased this API" });
-      return;
+    if (existingPurchase)
+      return res.status(400).json({ error: "API already purchased" });
+
+    // FREE API flow
+    if (api.pricingModel === "FREE") {
+      const newPurchase = await prisma.purchasedAPI.create({
+        data: {
+          userId,
+          apiId,
+        },
+      });
+
+      const newKey = await prisma.apiKey.create({
+        data: {
+          userId,
+          apiId,
+          key: generateApiKey(),
+          rateLimit: api.rateLimit,
+        },
+      });
+
+      return res.status(201).json({
+        message: "API purchased successfully (FREE)",
+        apiKey: newKey,
+        purchase: newPurchase,
+      });
     }
 
-    // Can't purchase your own API
-    if (api.ownerId === user.id) {
-      res.status(400).json({ error: "You cannot purchase your own API" });
-      return;
+    // PAID API flow
+    // Validate Razorpay signature
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: "Invalid Razorpay signature" });
     }
 
-    // CHANGE 3: Handle payment verification for PAID APIs
-    if (api.pricingModel === "PAID") {
-      // Validate required payment fields
-      if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
-        res.status(400).json({
-          error: "Payment details required for paid API",
-          required: [
-            "razorpay_payment_id",
-            "razorpay_order_id",
-            "razorpay_signature",
-          ],
-        });
-        return;
-      }
+    const payment = await razorpay.payments.fetch(razorpay_payment_id);
 
-      // Verify payment signature
-      const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest("hex");
-
-      if (expectedSignature !== razorpay_signature) {
-        res.status(400).json({ error: "Invalid payment signature" });
-        return;
-      }
-
-      // Verify payment with Razorpay
-      try {
-        const payment = await razorpay.payments.fetch(razorpay_payment_id);
-
-        if (payment.status !== "captured") {
-          res.status(400).json({ error: "Payment not completed" });
-          return;
-        }
-
-        // Verify amount matches API price
-        const expectedAmount = Math.round((api.price || 0) * 100);
-        if (payment.amount !== expectedAmount) {
-          res.status(400).json({ error: "Payment amount mismatch" });
-          return;
-        }
-      } catch (razorpayError) {
-        logger.error("Razorpay verification failed:", razorpayError);
-        res.status(500).json({ error: "Payment verification failed" });
-        return;
-      }
+    if (payment.status !== "captured") {
+      return res.status(400).json({ error: "Payment not captured" });
     }
 
-    // CHANGE 4: Generate API key (same for both FREE and PAID)
-    const generateApiKey = (): string => {
-      const prefix = apiId.substring(0, 8);
-      const timestamp = Date.now().toString(36);
-      const random = Math.random().toString(36).substring(2, 15);
-      return `${prefix}_${timestamp}_${random}`;
-    };
+    if (payment.amount !== Math.round(api.price! * 100)) {
+      return res.status(400).json({ error: "Payment amount mismatch" });
+    }
 
-    const apiKeyValue = generateApiKey();
-
-    // Start transaction for purchase
-    const [purchase, transaction, apiKey] = await prisma.$transaction([
-      // Record the purchase
+    const [purchase, apiKey, transaction] = await Promise.all([
       prisma.purchasedAPI.create({
         data: {
-          userId: user.id,
+          userId,
           apiId,
         },
       }),
-      // Create transaction record
-      prisma.transaction.create({
-        data: {
-          buyerId: user.id,
-          sellerId: api.ownerId,
-          apiId,
-          amount: api.price || 0,
-          status: "completed",
-        },
-      }),
-      // Generate API key
       prisma.apiKey.create({
         data: {
-          userId: user.id,
+          userId,
           apiId,
-          key: apiKeyValue,
-          name: `${api.name} Key`,
+          key: generateApiKey(),
           rateLimit: api.rateLimit,
+        },
+      }),
+      prisma.transaction.create({
+        data: {
+          buyerId: userId,
+          sellerId: api.ownerId,
+          apiId: api.id,
+          amount: api.price!,
+          status: "SUCCESS",
+          paymentId: razorpay_payment_id,
         },
       }),
     ]);
 
-    // Invalidate relevant caches if Redis is available
-    if (isRedisAvailable()) {
-      Promise.all([
-        invalidateCache(`user:${user.id}:purchased`),
-        invalidateCache(`api:${apiId}`), // Update purchase count
-      ]).catch((err) => {
-        logger.error(`Failed to invalidate caches after API purchase: ${err}`);
-      });
-    }
-
-    // Send notifications in background (don't block response)
-    Promise.all([
-      createNotification({
-        userId: user.id,
-        type: "PURCHASE_CONFIRMED",
-        title: "API Purchase Successful",
-        message: `You have successfully purchased access to ${api.name}`,
-        data: { apiId, transactionId: transaction.id },
-      }),
-      createNotification({
-        userId: api.ownerId,
-        type: "API_PURCHASED",
-        title: "Your API Was Purchased",
-        message: `Someone has purchased access to your API: ${api.name}`,
-        data: { apiId, transactionId: transaction.id },
-      }),
-    ]).catch((err) => {
-      logger.error(`Failed to create notifications for API purchase: ${err}`);
-    });
-
-    // CHANGE 5: Enhanced response with payment info for PAID APIs
-    const responseData: {
-      message: string;
-      purchase: typeof purchase;
-      apiKey: { id: string; key: string };
-      paymentId?: string;
-    } = {
+    return res.status(201).json({
       message: "API purchased successfully",
+      apiKey,
       purchase,
-      apiKey: {
-        id: apiKey.id,
-        key: apiKey.key,
-      },
-    };
-
-    // Add payment info for paid APIs
-    if (api.pricingModel === "PAID" && razorpay_payment_id) {
-      responseData.paymentId = razorpay_payment_id;
-    }
-
-    res.status(201).json(responseData);
-  } catch (error) {
-    logger.error("Error purchasing API:", error);
-    res.status(500).json({ error: "Failed to purchase API" });
+      paymentId: razorpay_payment_id,
+    });
+  } catch (err) {
+    console.error("Purchase Error:", err);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 };
 
