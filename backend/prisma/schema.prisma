@@ -10,14 +10,15 @@ datasource db {
 // ---------------- User Management ----------------
 
 model User {
-  id        String   @id @default(uuid())
-  auth0Id   String   @unique
-  email     String   @unique
-  name      String?
-  picture   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id                   String         @id @default(uuid())
+  auth0Id              String         @unique
+  email                String         @unique
+  name                 String?
+  picture              String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  razorpayAccountId    String?
+  onboardingStatus     String?
   // Relations
   profile              Profile?
   apiKeys              ApiKey[]
@@ -240,17 +241,20 @@ model PurchasedAPI {
 }
 
 model Transaction {
-  id        String   @id @default(uuid())
-  buyerId   String
-  sellerId  String
-  apiId     String
-  amount    Float
-  status    String   @default("completed")
-  createdAt DateTime @default(now())
-  paymentId String
-  buyer     User     @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
-  seller    User     @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
-  api       Api      @relation(fields: [apiId], references: [id])
+  id             String   @id @default(uuid())
+  buyerId        String
+  sellerId       String
+  apiId          String
+  amount         Float
+  platformFee    Float
+  tds            Float
+  sellerReceives Float
+  status         String   @default("completed")
+  createdAt      DateTime @default(now())
+  paymentId      String
+  buyer          User     @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
+  seller         User     @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
+  api            Api      @relation(fields: [apiId], references: [id])
 
   @@index([buyerId, apiId])
   @@index([sellerId])
