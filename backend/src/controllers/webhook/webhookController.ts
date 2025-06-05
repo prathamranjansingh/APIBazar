@@ -4,10 +4,20 @@ import { AuthenticatedRequest } from "../../utils/types";
 import { webhookSchema } from "../../utils/validators";
 import { logger } from "../../utils/logger";
 import { triggerWebhooks } from "../../services/webhookService";
+import Razorpay from "razorpay";
+import crypto from "crypto";
 
 const prisma = new PrismaClient();
 
-export const testWebhooks = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID!,
+  key_secret: process.env.RAZORPAY_KEY_SECRET!,
+});
+
+export const testWebhooks = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -23,7 +33,9 @@ export const testWebhooks = async (req: AuthenticatedRequest, res: Response): Pr
 
   try {
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -41,7 +53,9 @@ export const testWebhooks = async (req: AuthenticatedRequest, res: Response): Pr
     }
 
     if (api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to test webhooks for this API" });
+      res.status(403).json({
+        error: "You don't have permission to test webhooks for this API",
+      });
       return;
     }
 
@@ -76,7 +90,10 @@ export const testWebhooks = async (req: AuthenticatedRequest, res: Response): Pr
 /**
  * Get webhook delivery logs
  */
-export const getWebhookDeliveryLogs = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const getWebhookDeliveryLogs = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -88,7 +105,9 @@ export const getWebhookDeliveryLogs = async (req: AuthenticatedRequest, res: Res
 
   try {
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -106,7 +125,9 @@ export const getWebhookDeliveryLogs = async (req: AuthenticatedRequest, res: Res
     }
 
     if (webhook.api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to view this webhook" });
+      res
+        .status(403)
+        .json({ error: "You don't have permission to view this webhook" });
       return;
     }
 
@@ -137,7 +158,10 @@ export const getWebhookDeliveryLogs = async (req: AuthenticatedRequest, res: Res
 /**
  * Reset webhook failure count
  */
-export const resetWebhookFailures = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const resetWebhookFailures = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -147,7 +171,9 @@ export const resetWebhookFailures = async (req: AuthenticatedRequest, res: Respo
 
   try {
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -165,7 +191,9 @@ export const resetWebhookFailures = async (req: AuthenticatedRequest, res: Respo
     }
 
     if (webhook.api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to modify this webhook" });
+      res
+        .status(403)
+        .json({ error: "You don't have permission to modify this webhook" });
       return;
     }
 
@@ -188,7 +216,10 @@ export const resetWebhookFailures = async (req: AuthenticatedRequest, res: Respo
 /**
  * Create a webhook for an API
  */
-export const createWebhook = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const createWebhook = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -205,7 +236,9 @@ export const createWebhook = async (req: AuthenticatedRequest, res: Response): P
     }
 
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -214,7 +247,7 @@ export const createWebhook = async (req: AuthenticatedRequest, res: Response): P
     // Check if API exists and user owns it
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      select: { ownerId: true }
+      select: { ownerId: true },
     });
 
     if (!api) {
@@ -222,7 +255,9 @@ export const createWebhook = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
     if (api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to add webhooks to this API" });
+      res.status(403).json({
+        error: "You don't have permission to add webhooks to this API",
+      });
       return;
     }
 
@@ -234,8 +269,8 @@ export const createWebhook = async (req: AuthenticatedRequest, res: Response): P
         events: validated.data.events,
         secret: validated.data.secret,
         userId: user.id,
-        apiId
-      }
+        apiId,
+      },
     });
 
     res.status(201).json(webhook);
@@ -248,7 +283,10 @@ export const createWebhook = async (req: AuthenticatedRequest, res: Response): P
 /**
  * Get webhooks for an API
  */
-export const getApiWebhooks = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const getApiWebhooks = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -258,7 +296,9 @@ export const getApiWebhooks = async (req: AuthenticatedRequest, res: Response): 
 
   try {
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -267,7 +307,7 @@ export const getApiWebhooks = async (req: AuthenticatedRequest, res: Response): 
     // Check if API exists and user owns it
     const api = await prisma.api.findUnique({
       where: { id: apiId },
-      select: { ownerId: true }
+      select: { ownerId: true },
     });
 
     if (!api) {
@@ -275,7 +315,9 @@ export const getApiWebhooks = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
     if (api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to view webhooks for this API" });
+      res.status(403).json({
+        error: "You don't have permission to view webhooks for this API",
+      });
       return;
     }
 
@@ -291,7 +333,10 @@ export const getApiWebhooks = async (req: AuthenticatedRequest, res: Response): 
 /**
  * Update a webhook
  */
-export const updateWebhook = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const updateWebhook = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -308,7 +353,9 @@ export const updateWebhook = async (req: AuthenticatedRequest, res: Response): P
     }
 
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -317,7 +364,7 @@ export const updateWebhook = async (req: AuthenticatedRequest, res: Response): P
     // Check if webhook exists and user owns it
     const webhook = await prisma.webhook.findUnique({
       where: { id: webhookId },
-      include: { api: { select: { ownerId: true } } }
+      include: { api: { select: { ownerId: true } } },
     });
 
     if (!webhook) {
@@ -325,14 +372,16 @@ export const updateWebhook = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
     if (webhook.api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to update this webhook" });
+      res
+        .status(403)
+        .json({ error: "You don't have permission to update this webhook" });
       return;
     }
 
     // Update the webhook
     const updatedWebhook = await prisma.webhook.update({
       where: { id: webhookId },
-      data: validated.data
+      data: validated.data,
     });
 
     res.json(updatedWebhook);
@@ -345,7 +394,10 @@ export const updateWebhook = async (req: AuthenticatedRequest, res: Response): P
 /**
  * Delete a webhook
  */
-export const deleteWebhook = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+export const deleteWebhook = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
   if (!req.auth?.sub) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -355,7 +407,9 @@ export const deleteWebhook = async (req: AuthenticatedRequest, res: Response): P
 
   try {
     // Get user
-    const user = await prisma.user.findUnique({ where: { auth0Id: req.auth.sub } });
+    const user = await prisma.user.findUnique({
+      where: { auth0Id: req.auth.sub },
+    });
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
@@ -364,7 +418,7 @@ export const deleteWebhook = async (req: AuthenticatedRequest, res: Response): P
     // Check if webhook exists and user owns it
     const webhook = await prisma.webhook.findUnique({
       where: { id: webhookId },
-      include: { api: { select: { ownerId: true } } }
+      include: { api: { select: { ownerId: true } } },
     });
 
     if (!webhook) {
@@ -372,7 +426,9 @@ export const deleteWebhook = async (req: AuthenticatedRequest, res: Response): P
       return;
     }
     if (webhook.api.ownerId !== user.id) {
-      res.status(403).json({ error: "You don't have permission to delete this webhook" });
+      res
+        .status(403)
+        .json({ error: "You don't have permission to delete this webhook" });
       return;
     }
 
@@ -382,6 +438,154 @@ export const deleteWebhook = async (req: AuthenticatedRequest, res: Response): P
   } catch (error) {
     logger.error("Error deleting webhook:", error);
     res.status(500).json({ error: "Failed to delete webhook" });
+  }
+};
+
+export const handleRazorpayWebhook = async (req: Request, res: Response) => {
+  try {
+    const signature = req.headers["x-razorpay-signature"] as string;
+    const body = JSON.stringify(req.body);
+
+    // Verify webhook signature
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_WEBHOOK_SECRET!)
+      .update(body)
+      .digest("hex");
+
+    if (signature !== expectedSignature) {
+      console.error("Invalid webhook signature");
+      return res.status(400).json({ error: "Invalid signature" });
+    }
+
+    const event = req.body;
+    console.log(`Received webhook event: ${event.event}`);
+
+    switch (event.event) {
+      case "payment.captured":
+        await handlePaymentCaptured(event.payload.payment.entity);
+        break;
+
+      case "payment.failed":
+        await handlePaymentFailed(event.payload.payment.entity);
+        break;
+
+      case "transfer.processed":
+        await handleTransferProcessed(event.payload.transfer.entity);
+        break;
+
+      case "transfer.failed":
+        await handleTransferFailed(event.payload.transfer.entity);
+        break;
+
+      default:
+        console.log(`Unhandled webhook event: ${event.event}`);
+    }
+
+    res.json({ status: "ok" });
+  } catch (error: any) {
+    console.error("Webhook processing error:", error);
+    res.status(500).json({ error: "Webhook processing failed" });
+  }
+};
+
+// Helper functions for webhook events
+const handlePaymentCaptured = async (payment: any) => {
+  try {
+    console.log(`Processing payment captured: ${payment.id}`);
+
+    const transaction = await prisma.transaction.findFirst({
+      where: { razorpayOrderId: payment.order_id },
+      include: {
+        seller: true,
+        api: true,
+      },
+    });
+
+    if (!transaction) {
+      console.error(`Transaction not found for order: ${payment.order_id}`);
+      return;
+    }
+
+    if (transaction.status !== "pending") {
+      console.log(`Transaction already processed: ${transaction.id}`);
+      return;
+    }
+
+    // Update transaction status
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: "completed",
+        razorpayPaymentId: payment.id,
+        completedAt: new Date(),
+      },
+    });
+
+    const { processSellertransfer } = await import("../api/apiController");
+    processSellertransfer(transaction, payment.id);
+
+    console.log(`Payment processed successfully: ${payment.id}`);
+  } catch (error) {
+    console.error("Error handling payment captured:", error);
+    throw error;
+  }
+};
+
+const handlePaymentFailed = async (payment: any) => {
+  try {
+    console.log(`Processing payment failed: ${payment.id}`);
+
+    await prisma.transaction.updateMany({
+      where: { razorpayOrderId: payment.order_id },
+      data: {
+        status: "failed",
+        failureReason: payment.error_description || "Payment failed",
+      },
+    });
+
+    console.log(`Payment failure processed: ${payment.id}`);
+  } catch (error) {
+    console.error("Error handling payment failed:", error);
+    throw error;
+  }
+};
+
+const handleTransferProcessed = async (transfer: any) => {
+  try {
+    console.log(`Processing transfer success: ${transfer.id}`);
+
+    await prisma.transaction.updateMany({
+      where: { transferId: transfer.id },
+      data: {
+        transferStatus: "completed",
+        transferError: null,
+      },
+    });
+
+    console.log(`Transfer success processed: ${transfer.id}`);
+  } catch (error) {
+    console.error("Error handling transfer processed:", error);
+    throw error;
+  }
+};
+
+const handleTransferFailed = async (transfer: any) => {
+  try {
+    console.log(`Processing transfer failure: ${transfer.id}`);
+
+    await prisma.transaction.updateMany({
+      where: { transferId: transfer.id },
+      data: {
+        transferStatus: "failed",
+        transferError: transfer.error?.description || "Transfer failed",
+      },
+    });
+
+    // Optionally, you can implement retry logic here
+    console.log(`Transfer failure processed: ${transfer.id}`);
+  } catch (error) {
+    console.error("Error handling transfer failed:", error);
+    throw error;
   }
 };
 

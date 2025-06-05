@@ -68,6 +68,16 @@ export const MarketplaceService = {
     }
   },
 
+  verifyPayment: async (paymentData) => {
+    try {
+      const response = await apiClient.post('/payments/verify', paymentData);
+      return response.data;
+    } catch (error) {
+      console.error('Error verifying payment:', error);
+      throw error;
+    }
+  },
+
   getApiReviews: async (apiId, params = {}) => {
     try {
       const response = await apiClient.get(`/reviews/apis/${apiId}`, { params });

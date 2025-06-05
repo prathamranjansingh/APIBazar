@@ -1066,15 +1066,33 @@ export const purchaseApi = async (req: AuthenticatedRequest, res: Response) => {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
+
     const { apiId } = req.params;
+
     // Get user from auth0Id
     const user = await prisma.user.findUnique({
       where: { auth0Id: req.auth.sub },
     });
+
     if (!user) {
       res.status(404).json({ error: "User not found" });
       return;
     }
+
+    // Check if already purchased
+    const existingPurchase = await prisma.transaction.findFirst({
+      where: {
+        buyerId: user.id,
+        apiId: apiId,
+        status: "completed",
+      },
+    });
+
+    if (existingPurchase) {
+      res.status(400).json({ error: "API already purchased" });
+      return;
+    }
+
     const result = await purchaseApiTransaction(apiId, user.id);
     res.json(result);
   } catch (error: any) {
@@ -1104,45 +1122,33 @@ export const purchaseApiTransaction = async (
     throw new Error("Seller has not linked their Razorpay account");
   }
 
+  // Check seller account status
+  const sellerAccount = await razorpay.accounts.fetch(seller.razorpayAccountId);
+  if (sellerAccount.status !== "activated") {
+    throw new Error("Seller account is not activated for receiving payments");
+  }
+
   const amount = api.price;
   const platformFee = amount * 0.15;
   const sellerPayout = amount - platformFee;
   const tds = sellerPayout * 0.1;
   const sellerReceives = sellerPayout - tds;
 
-  // Create Razorpay order with transfer to seller and platform
+  // Create Razorpay order WITHOUT transfers (we'll handle transfers after payment)
   const payment = await razorpay.orders.create({
-    amount: Math.round(amount * 100),
+    amount: Math.round(amount * 100), // Convert to paise
     currency: "INR",
-    receipt: `receipt_${apiId}_${Date.now()}`,
+    receipt: `api_purchase_${apiId}_${Date.now()}`,
     notes: {
       sellerId: seller.id,
       buyerId,
       apiId,
+      sellerAmount: Math.round(sellerReceives * 100),
+      platformFee: Math.round(platformFee * 100),
     },
-    transfers: [
-      {
-        account: seller.razorpayAccountId,
-        amount: Math.round(sellerReceives * 100),
-        currency: "INR",
-        notes: {
-          type: "Seller Payout",
-        },
-        on_hold: false,
-      },
-      {
-        account: process.env.PLATFORM_RAZORPAY_ACCOUNT_ID!, // Your account
-        amount: Math.round(platformFee * 100),
-        currency: "INR",
-        notes: {
-          type: "Platform Fee",
-        },
-        on_hold: false,
-      },
-    ],
   });
 
-  // Save transaction in DB
+  // Save transaction in DB with pending status
   const transaction = await prisma.transaction.create({
     data: {
       buyerId,
@@ -1152,17 +1158,126 @@ export const purchaseApiTransaction = async (
       platformFee,
       tds,
       sellerReceives,
-      status: "pending", // You can set to 'completed' after payment success webhook
+      status: "pending",
       paymentId: payment.id,
+      razorpayOrderId: payment.id,
     },
   });
 
   return {
     success: true,
     orderId: payment.id,
-    amount,
+    amount: Math.round(amount * 100), // Return in paise for frontend
     currency: "INR",
+    key: process.env.RAZORPAY_KEY_ID,
+    name: "Your Platform Name",
+    description: `Purchase API: ${api.name}`,
+    prefill: {
+      email: seller.email, // You might want buyer's email here
+    },
   };
+};
+
+export const verifyPayment = async (
+  req: AuthenticatedRequest,
+  res: Response
+) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body;
+
+    // Verify signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .update(body.toString())
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      res.status(400).json({ error: "Invalid signature" });
+      return;
+    }
+
+    // Find transaction
+    const transaction = await prisma.transaction.findFirst({
+      where: {
+        razorpayOrderId: razorpay_order_id,
+        status: "pending",
+      },
+      include: {
+        api: true,
+        seller: true,
+      },
+    });
+
+    if (!transaction) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    // Update transaction status
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        status: "completed",
+        razorpayPaymentId: razorpay_payment_id,
+        completedAt: new Date(),
+      },
+    });
+
+    // Process seller transfer
+    await processSellertransfer(transaction, razorpay_payment_id);
+
+    res.json({ success: true, message: "Payment verified successfully" });
+  } catch (error: any) {
+    logger.error("Error verifying payment:", error);
+    res.status(500).json({ error: "Payment verification failed" });
+  }
+};
+
+// 4. Process Seller Transfer
+export const processSellertransfer = async (
+  transaction: any,
+  paymentId: string
+) => {
+  try {
+    // Create transfer to seller
+    const transfer = await razorpay.transfers.create({
+      account: transaction.seller.razorpayAccountId,
+      amount: Math.round(transaction.sellerReceives * 100),
+      currency: "INR",
+      notes: {
+        transactionId: transaction.id,
+        apiId: transaction.apiId,
+        type: "api_sale_payout",
+      },
+    });
+
+    // Update transaction with transfer details
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        transferId: transfer.id,
+        transferStatus: "completed",
+      },
+    });
+
+    logger.info(`Transfer created successfully: ${transfer.id}`);
+  } catch (error: any) {
+    logger.error("Error processing seller transfer:", error);
+
+    // Update transaction with transfer failure
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+      data: {
+        transferStatus: "failed",
+        transferError: error.message,
+      },
+    });
+
+    // You might want to implement retry logic here
+    throw error;
+  }
 };
 
 export default {

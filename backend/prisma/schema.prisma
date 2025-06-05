@@ -241,20 +241,27 @@ model PurchasedAPI {
 }
 
 model Transaction {
-  id             String   @id @default(uuid())
-  buyerId        String
-  sellerId       String
-  apiId          String
-  amount         Float
-  platformFee    Float
-  tds            Float
-  sellerReceives Float
-  status         String   @default("completed")
-  createdAt      DateTime @default(now())
-  paymentId      String
-  buyer          User     @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
-  seller         User     @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
-  api            Api      @relation(fields: [apiId], references: [id])
+  id                String    @id @default(uuid())
+  buyerId           String
+  sellerId          String
+  apiId             String
+  amount            Float
+  platformFee       Float
+  tds               Float
+  sellerReceives    Float
+  status            String    @default("completed")
+  createdAt         DateTime  @default(now())
+  paymentId         String
+  buyer             User      @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
+  seller            User      @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
+  api               Api       @relation(fields: [apiId], references: [id])
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  transferId        String?
+  transferStatus    String? // 'pending', 'completed', 'failed'
+  transferError     String?
+  completedAt       DateTime?
+  failureReason     String?
 
   @@index([buyerId, apiId])
   @@index([sellerId])
