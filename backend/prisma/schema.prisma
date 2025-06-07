@@ -7,8 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------- User Management ----------------
-
 model User {
   id                   String         @id @default(uuid())
   auth0Id              String         @unique
@@ -19,92 +17,80 @@ model User {
   updatedAt            DateTime       @updatedAt
   razorpayAccountId    String?
   onboardingStatus     String?
-  // Relations
-  profile              Profile?
-  apiKeys              ApiKey[]
-  purchasedAPIs        PurchasedAPI[]
   listedAPIs           Api[]
+  apiKeys              ApiKey[]
+  notifications        Notification[]
+  profile              Profile?
+  purchasedAPIs        PurchasedAPI[]
+  reviewsReceived      Review[]       @relation("receivedReviews")
+  reviews              Review[]
   transactionsAsBuyer  Transaction[]  @relation("buyerTransaction")
   transactionsAsSeller Transaction[]  @relation("sellerTransaction")
-  reviews              Review[] // Reviews created by this user
-  reviewsReceived      Review[]       @relation("receivedReviews")
-  notifications        Notification[]
   webhooks             Webhook[]
 }
 
 model Profile {
   id       String  @id @default(uuid())
   userId   String  @unique
-  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   bio      String?
   location String?
   website  String?
   company  String?
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
-// ---------------- API Management ----------------
 
 model Api {
-  id            String       @id @default(uuid())
+  id            String         @id @default(uuid())
   name          String
   description   String
-  category      String // Can define an enum if needed
-  documentation String // Markdown content
+  category      String
+  documentation String
   pricingModel  PricingModel
-  price         Float? // Price for PAID APIs (null for FREE)
+  price         Float?
   baseUrl       String
   ownerId       String
-  rateLimit     Int          @default(100) // Default rate limit per hour
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  // Relations
-  owner        User           @relation(fields: [ownerId], references: [id])
-  endpoints    Endpoint[]
-  analytics    ApiAnalytics?
-  transactions Transaction[]
-  reviews      Review[]
-  purchasedBy  PurchasedAPI[]
-  apiKeys      ApiKey[]
-  webhooks     Webhook[]
-  callLogs     ApiCallLog[]
-}
-
-enum PricingModel {
-  FREE
-  PAID
+  rateLimit     Int            @default(100)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  owner         User           @relation(fields: [ownerId], references: [id])
+  analytics     ApiAnalytics?
+  callLogs      ApiCallLog[]
+  apiKeys       ApiKey[]
+  endpoints     Endpoint[]
+  purchasedBy   PurchasedAPI[]
+  reviews       Review[]
+  transactions  Transaction[]
+  webhooks      Webhook[]
 }
 
 model Endpoint {
   id             String   @id @default(uuid())
   apiId          String
-  api            Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
   name           String
-  method         String // GET, POST, PUT, DELETE, etc.
-  path           String // "/users", "/posts/:id"
+  method         String
+  path           String
   description    String?
-  headers        Json? // Example headers
-  requestBody    Json? // Example request body
-  responseSchema Json? // Example response
-  rateLimit      Int? // Custom rate limit (null = use API default)
+  headers        Json?
+  requestBody    Json?
+  responseSchema Json?
+  rateLimit      Int?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  api            Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
   @@unique([apiId, path, method])
 }
 
-// ---------------- Analytics ----------------
-
 model ApiAnalytics {
   id              String   @id @default(uuid())
   apiId           String   @unique
-  api             Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
   totalCalls      Int      @default(0)
   successCalls    Int      @default(0)
   failedCalls     Int      @default(0)
   errorRate       Float    @default(0.0)
   responseTimeAvg Float    @default(0.0)
   lastUpdated     DateTime @updatedAt
+  api             Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
   @@index([apiId])
 }
@@ -112,7 +98,6 @@ model ApiAnalytics {
 model ApiCallLog {
   id           String   @id @default(uuid())
   apiId        String
-  api          Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
   timestamp    DateTime @default(now())
   statusCode   Int
   responseTime Float
@@ -122,6 +107,7 @@ model ApiCallLog {
   userAgent    String?
   ipAddress    String?
   errorMessage String?
+  api          Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
   @@index([apiId])
   @@index([timestamp])
@@ -130,51 +116,45 @@ model ApiCallLog {
   @@index([endpoint])
 }
 
-// ---------------- Rate Limiting ----------------
-
 model RateLimitLog {
   id        String   @id @default(uuid())
   apiKeyId  String
-  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
   timestamp DateTime @default(now())
   count     Int      @default(1)
   ip        String?
   endpoint  String?
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
 
   @@index([apiKeyId, timestamp])
 }
 
-// ---------------- API Access ----------------
-
 model ApiKey {
   id            String         @id @default(uuid())
   apiId         String
-  api           Api            @relation(fields: [apiId], references: [id], onDelete: Cascade)
   userId        String
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   key           String         @unique
   name          String?
-  rateLimit     Int            @default(1000) // Max requests per month
+  rateLimit     Int            @default(1000)
   isActive      Boolean        @default(true)
   expiresAt     DateTime?
   createdAt     DateTime       @default(now())
   lastUsed      DateTime?
+  api           Api            @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   rateLimitLogs RateLimitLog[]
 
   @@index([apiId, userId])
 }
 
-// ---------------- Webhooks ----------------
-
 model WebhookDelivery {
   id        String   @id @default(uuid())
   webhookId String
-  webhook   Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
   event     String
   status    String
   payload   String
   error     String?
   createdAt DateTime @default(now())
+  webhook   Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
 
   @@index([webhookId])
   @@index([status])
@@ -186,35 +166,84 @@ model Webhook {
   url           String
   secret        String?
   userId        String
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   apiId         String
-  api           Api               @relation(fields: [apiId], references: [id], onDelete: Cascade)
   events        String[]
   isActive      Boolean           @default(true)
   createdAt     DateTime          @default(now())
   lastTriggered DateTime?
   lastStatus    Int?
   failCount     Int               @default(0)
+  api           Api               @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   deliveries    WebhookDelivery[]
 
   @@index([apiId, isActive])
 }
 
-// ---------------- Notifications ----------------
-
 model Notification {
   id        String           @id @default(uuid())
   userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      NotificationType
   title     String
   message   String
   isRead    Boolean          @default(false)
   data      Json?
   createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
   @@index([createdAt])
+}
+
+model PurchasedAPI {
+  id        String   @id @default(uuid())
+  userId    String
+  apiId     String
+  createdAt DateTime @default(now())
+  api       Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, apiId])
+}
+
+model Transaction {
+  id             String   @id @default(uuid())
+  buyerId        String
+  sellerId       String
+  apiId          String
+  amount         Float
+  platformFee    Float
+  tds            Float
+  sellerReceives Float
+  status         String   @default("completed")
+  createdAt      DateTime @default(now())
+  paymentId      String
+  api            Api      @relation(fields: [apiId], references: [id])
+  buyer          User     @relation("buyerTransaction", fields: [buyerId], references: [id])
+  seller         User     @relation("sellerTransaction", fields: [sellerId], references: [id])
+
+  @@index([buyerId, apiId])
+  @@index([sellerId])
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  apiId     String
+  authorId  String?
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  api       Api      @relation(fields: [apiId], references: [id])
+  author    User?    @relation("receivedReviews", fields: [authorId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, apiId])
+}
+
+enum PricingModel {
+  FREE
+  PAID
 }
 
 enum NotificationType {
@@ -225,61 +254,4 @@ enum NotificationType {
   RATE_LIMIT_REACHED
   PAYMENT_RECEIVED
   SYSTEM
-}
-
-// ---------------- Marketplace Features ----------------
-
-model PurchasedAPI {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  apiId     String
-  api       Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([userId, apiId])
-}
-
-model Transaction {
-  id                String    @id @default(uuid())
-  buyerId           String
-  sellerId          String
-  apiId             String
-  amount            Float
-  platformFee       Float
-  tds               Float
-  sellerReceives    Float
-  status            String    @default("completed")
-  createdAt         DateTime  @default(now())
-  paymentId         String
-  buyer             User      @relation(fields: [buyerId], references: [id], name: "buyerTransaction")
-  seller            User      @relation(fields: [sellerId], references: [id], name: "sellerTransaction")
-  api               Api       @relation(fields: [apiId], references: [id])
-  razorpayOrderId   String?
-  razorpayPaymentId String?
-  transferId        String?
-  transferStatus    String? // 'pending', 'completed', 'failed'
-  transferError     String?
-  completedAt       DateTime?
-  failureReason     String?
-
-  @@index([buyerId, apiId])
-  @@index([sellerId])
-}
-
-// ---------------- Social Features ----------------
-
-model Review {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  apiId     String
-  api       Api      @relation(fields: [apiId], references: [id])
-  authorId  String?
-  author    User?    @relation("receivedReviews", fields: [authorId], references: [id], onDelete: SetNull)
-  rating    Int // 1-5 stars
-  comment   String?
-  createdAt DateTime @default(now())
-
-  @@unique([userId, apiId])
 }

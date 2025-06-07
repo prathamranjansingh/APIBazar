@@ -1062,6 +1062,8 @@ export const deleteEndpoint = async (
  */
 export const purchaseApi = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    console.log("Headers:", req.headers);
+
     if (!req.auth?.sub) {
       res.status(401).json({ error: "Unauthorized" });
       return;
@@ -1113,20 +1115,16 @@ export const purchaseApiTransaction = async (
     include: { owner: true },
   });
 
-  if (!api || api.pricingModel !== "PAID" || !api.price) {
+  if (!api || api.pricingModel !== "PAID" || !api.price)
     throw new Error("API not found or not for sale");
-  }
 
   const seller = api.owner;
-  if (!seller.razorpayAccountId) {
+  if (!seller.razorpayAccountId)
     throw new Error("Seller has not linked their Razorpay account");
-  }
 
-  // Check seller account status
   const sellerAccount = await razorpay.accounts.fetch(seller.razorpayAccountId);
-  if (sellerAccount.status !== "activated") {
-    throw new Error("Seller account is not activated for receiving payments");
-  }
+  if (sellerAccount.status !== "activated")
+    throw new Error("Seller account is not activated");
 
   const amount = api.price;
   const platformFee = amount * 0.15;
@@ -1134,9 +1132,8 @@ export const purchaseApiTransaction = async (
   const tds = sellerPayout * 0.1;
   const sellerReceives = sellerPayout - tds;
 
-  // Create Razorpay order WITHOUT transfers (we'll handle transfers after payment)
   const payment = await razorpay.orders.create({
-    amount: Math.round(amount * 100), // Convert to paise
+    amount: Math.round(amount * 100),
     currency: "INR",
     receipt: `api_purchase_${apiId}_${Date.now()}`,
     notes: {
@@ -1148,8 +1145,7 @@ export const purchaseApiTransaction = async (
     },
   });
 
-  // Save transaction in DB with pending status
-  const transaction = await prisma.transaction.create({
+  await prisma.transaction.create({
     data: {
       buyerId,
       sellerId: seller.id,
@@ -1167,38 +1163,32 @@ export const purchaseApiTransaction = async (
   return {
     success: true,
     orderId: payment.id,
-    amount: Math.round(amount * 100), // Return in paise for frontend
+    amount: Math.round(amount * 100),
     currency: "INR",
     key: process.env.RAZORPAY_KEY_ID,
     name: "Your Platform Name",
     description: `Purchase API: ${api.name}`,
     prefill: {
-      email: seller.email, // You might want buyer's email here
+      email: seller.email,
     },
   };
 };
 
-export const verifyPayment = async (
-  req: AuthenticatedRequest,
-  res: Response
-) => {
+export const verifyPayment = async (req: AuthenticatedRequest, res: any) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       req.body;
-
-    // Verify signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
+
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
       .update(body.toString())
       .digest("hex");
 
     if (expectedSignature !== razorpay_signature) {
-      res.status(400).json({ error: "Invalid signature" });
-      return;
+      return res.status(400).json({ error: "Invalid signature" });
     }
 
-    // Find transaction
     const transaction = await prisma.transaction.findFirst({
       where: {
         razorpayOrderId: razorpay_order_id,
@@ -1210,12 +1200,9 @@ export const verifyPayment = async (
       },
     });
 
-    if (!transaction) {
-      res.status(404).json({ error: "Transaction not found" });
-      return;
-    }
+    if (!transaction)
+      return res.status(404).json({ error: "Transaction not found" });
 
-    // Update transaction status
     await prisma.transaction.update({
       where: { id: transaction.id },
       data: {
@@ -1225,9 +1212,7 @@ export const verifyPayment = async (
       },
     });
 
-    // Process seller transfer
     await processSellertransfer(transaction, razorpay_payment_id);
-
     res.json({ success: true, message: "Payment verified successfully" });
   } catch (error: any) {
     logger.error("Error verifying payment:", error);

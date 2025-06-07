@@ -441,7 +441,7 @@ export const deleteWebhook = async (
   }
 };
 
-export const handleRazorpayWebhook = async (req: Request, res: Response) => {
+export const handleRazorpayWebhook = async (req: Request, res: any) => {
   try {
     const signature = req.headers["x-razorpay-signature"] as string;
     const body = JSON.stringify(req.body);
