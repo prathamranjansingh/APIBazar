@@ -15,8 +15,8 @@ model User {
   picture              String?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  razorpayAccountId    String?
   onboardingStatus     String?
+  razorpayAccountId    String?
   listedAPIs           Api[]
   apiKeys              ApiKey[]
   notifications        Notification[]
@@ -46,12 +46,12 @@ model Api {
   category      String
   documentation String
   pricingModel  PricingModel
-  price         Float?
   baseUrl       String
   ownerId       String
-  rateLimit     Int            @default(100)
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  price         Float?
+  rateLimit     Int            @default(100)
   owner         User           @relation(fields: [ownerId], references: [id])
   analytics     ApiAnalytics?
   callLogs      ApiCallLog[]
@@ -66,15 +66,15 @@ model Api {
 model Endpoint {
   id             String   @id @default(uuid())
   apiId          String
-  name           String
   method         String
   path           String
   description    String?
   headers        Json?
   requestBody    Json?
-  responseSchema Json?
-  rateLimit      Int?
   createdAt      DateTime @default(now())
+  name           String
+  rateLimit      Int?
+  responseSchema Json?
   updatedAt      DateTime @updatedAt
   api            Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
@@ -85,11 +85,11 @@ model ApiAnalytics {
   id              String   @id @default(uuid())
   apiId           String   @unique
   totalCalls      Int      @default(0)
-  successCalls    Int      @default(0)
-  failedCalls     Int      @default(0)
   errorRate       Float    @default(0.0)
   responseTimeAvg Float    @default(0.0)
+  failedCalls     Int      @default(0)
   lastUpdated     DateTime @updatedAt
+  successCalls    Int      @default(0)
   api             Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
 
   @@index([apiId])
@@ -133,12 +133,12 @@ model ApiKey {
   apiId         String
   userId        String
   key           String         @unique
-  name          String?
+  createdAt     DateTime       @default(now())
+  expiresAt     DateTime?
   rateLimit     Int            @default(1000)
   isActive      Boolean        @default(true)
-  expiresAt     DateTime?
-  createdAt     DateTime       @default(now())
   lastUsed      DateTime?
+  name          String?
   api           Api            @relation(fields: [apiId], references: [id], onDelete: Cascade)
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   rateLimitLogs RateLimitLog[]
@@ -207,20 +207,27 @@ model PurchasedAPI {
 }
 
 model Transaction {
-  id             String   @id @default(uuid())
-  buyerId        String
-  sellerId       String
-  apiId          String
-  amount         Float
-  platformFee    Float
-  tds            Float
-  sellerReceives Float
-  status         String   @default("completed")
-  createdAt      DateTime @default(now())
-  paymentId      String
-  api            Api      @relation(fields: [apiId], references: [id])
-  buyer          User     @relation("buyerTransaction", fields: [buyerId], references: [id])
-  seller         User     @relation("sellerTransaction", fields: [sellerId], references: [id])
+  id                String    @id @default(uuid())
+  buyerId           String
+  sellerId          String
+  apiId             String
+  amount            Float
+  createdAt         DateTime  @default(now())
+  status            String    @default("completed")
+  completedAt       DateTime?
+  failureReason     String?
+  paymentId         String
+  platformFee       Float
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  sellerReceives    Float
+  tds               Float
+  transferError     String?
+  transferId        String?
+  transferStatus    String?
+  api               Api       @relation(fields: [apiId], references: [id])
+  buyer             User      @relation("buyerTransaction", fields: [buyerId], references: [id])
+  seller            User      @relation("sellerTransaction", fields: [sellerId], references: [id])
 
   @@index([buyerId, apiId])
   @@index([sellerId])
@@ -230,10 +237,10 @@ model Review {
   id        String   @id @default(uuid())
   userId    String
   apiId     String
-  authorId  String?
   rating    Int
   comment   String?
   createdAt DateTime @default(now())
+  authorId  String?
   api       Api      @relation(fields: [apiId], references: [id])
   author    User?    @relation("receivedReviews", fields: [authorId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
