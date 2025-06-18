@@ -1,77 +1,84 @@
-# APIBazaar Project Brief 🚀
+# Turborepo starter
 
-We're building an API marketplace platform where developers can discover, test, and purchase APIs - think of it like an App Store but for APIs. Similar to platforms like RapidAPI, but with enhanced features focused on making API testing and integration easier.
+This Turborepo starter is maintained by the Turborepo core team.
 
-## Key Aspects of Our Platform 🔑
+## Using this example
 
-### For API Buyers 🛒
+Run the following command:
 
-- Test APIs in real-time before purchasing through an interactive playground 🧪
-- Compare similar APIs side-by-side (pricing, features) 🔍
-- Access detailed analytics 📊
-- Get AI-powered chat agent which should recommend APIs based on their project needs 🤖
-- Save favorite APIs ⭐
-- View comprehensive documentation with code examples in multiple languages 📚
+```sh
+npx create-turbo@latest
+```
 
-### For API Sellers 💼
+## What's inside?
 
-- List and monetize their APIs, it can be for free also 💰
-- Track usage, revenue, and customer engagement 📈
-- Set flexible pricing models (pay-per-call, subscription, custom plans) 💳
-- Get insights into how developers are using their APIs 🧠
-- Monitor API performance and uptime ⏱️
-- Manage customer access and API keys 🔑
+This Turborepo includes the following packages/apps:
 
-## Advanced Features 🌟
+### Apps and Packages
 
-- AI-powered agent which will do API recommendations 🤖
-- Smart documentation with version tracking 📄
-- Built-in security scanning and monitoring 🔒
-- Integration templates for popular frameworks 🛠️
-- Community features for developers to share experiences and reviews 🗣️
+- `docs`: a [Next.js](https://nextjs.org/) app
+- `web`: another [Next.js](https://nextjs.org/) app
+- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
+- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
+- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
 
-The goal is to create a trusted marketplace where developers can confidently discover and integrate APIs into their projects, while API providers can effectively monetize and manage their services.
+Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
 
-🚀 Complete Overview of APIBazaar - API Marketplace & Live Testing Platform
-APIBazaar is a full-featured API marketplace where developers can buy, sell, test, and manage APIs. It includes:
-✅ Buyers can discover, test, and purchase APIs.
-✅ Sellers can list APIs, define endpoints, and provide full documentation.
-✅ A built-in API Playground (like Postman) to test APIs in real-time.
-✅ Secure API key management & rate limiting.
-✅ Transactions, analytics, and review system.
+### Utilities
 
-📌 Project Features & Flow
-1️⃣ API Sellers (Developers)
-List APIs for sale or free access.
-Define multiple endpoints with: ✅ Methods (GET, POST, etc.)
-✅ Headers, Query Params, Request Body
-✅ Example Responses & Error Handling
-Provide Markdown documentation for API users.
-Track API usage, revenue, and analytics.
-Set pricing models (Free, Pay-per-call, Subscription).
-2️⃣ API Buyers (Consumers)
-Browse APIs & endpoints.
-Test APIs live with: ✅ Headers, Params, Request Body, Auth Tokens, Raw Input.
-✅ See live responses, logs, latency & error handling.
-Purchase APIs and get an API key for access.
-Track usage & manage API keys.
-Leave reviews & feedback.
-3️⃣ API Playground (Like Postman)
-Allows buyers to test APIs before buying.
-Supports:
-✅ Headers
-✅ Query Params
-✅ Body (Raw, JSON, Form-Data, etc.)
-✅ Authentication Headers
-✅ Live Response & Logs
-Sends requests to the seller’s backend and returns real API responses.
-4️⃣ API Key Management
-Buyers receive API keys after purchasing an API.
-Keys are required to make API calls.
-Rate limiting using Redis (e.g., 100 requests per minute).
-5️⃣ Analytics & Logging
-Track API usage, request logs, latency.
-Kafka handles real-time logs & analytics.
-6️⃣ Transactions & Payments
-Stripe / Razorpay for API purchases.
-Transaction logs for auditing.
+This Turborepo has some additional tools already setup for you:
+
+- [TypeScript](https://www.typescriptlang.org/) for static type checking
+- [ESLint](https://eslint.org/) for code linting
+- [Prettier](https://prettier.io) for code formatting
+
+### Build
+
+To build all apps and packages, run the following command:
+
+```
+cd my-turborepo
+pnpm build
+```
+
+### Develop
+
+To develop all apps and packages, run the following command:
+
+```
+cd my-turborepo
+pnpm dev
+```
+
+### Remote Caching
+
+> [!TIP]
+> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+
+Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+
+By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+
+```
+cd my-turborepo
+npx turbo login
+```
+
+This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+
+Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+
+```
+npx turbo link
+```
+
+## Useful Links
+
+Learn more about the power of Turborepo:
+
+- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
+- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
+- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
+- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
+- [Configuration Options](https://turborepo.com/docs/reference/configuration)
+- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
