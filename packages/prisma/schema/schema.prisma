@@ -1,0 +1,264 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+    id                   String         @id @default(uuid())
+    auth0Id              String         @unique
+    email                String         @unique
+    name                 String?
+    picture              String?
+    createdAt            DateTime       @default(now())
+    updatedAt            DateTime       @updatedAt
+    onboardingStatus     String?
+    razorpayAccountId    String?
+    listedAPIs           Api[]
+    apiKeys              ApiKey[]
+    notifications        Notification[]
+    profile              Profile?
+    purchasedAPIs        PurchasedAPI[]
+    reviewsReceived      Review[]       @relation("receivedReviews")
+    reviews              Review[]
+    transactionsAsBuyer  Transaction[]  @relation("buyerTransaction")
+    transactionsAsSeller Transaction[]  @relation("sellerTransaction")
+    webhooks             Webhook[]
+}
+
+model Profile {
+    id       String  @id @default(uuid())
+    userId   String  @unique
+    bio      String?
+    location String?
+    website  String?
+    company  String?
+    user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Api {
+    id            String         @id @default(uuid())
+    name          String
+    description   String
+    category      String
+    documentation String
+    pricingModel  PricingModel
+    baseUrl       String
+    ownerId       String
+    createdAt     DateTime       @default(now())
+    updatedAt     DateTime       @updatedAt
+    price         Float?
+    rateLimit     Int            @default(100)
+    owner         User           @relation(fields: [ownerId], references: [id])
+    analytics     ApiAnalytics?
+    callLogs      ApiCallLog[]
+    apiKeys       ApiKey[]
+    endpoints     Endpoint[]
+    purchasedBy   PurchasedAPI[]
+    reviews       Review[]
+    transactions  Transaction[]
+    webhooks      Webhook[]
+}
+
+model Endpoint {
+    id             String   @id @default(uuid())
+    apiId          String
+    method         String
+    path           String
+    description    String?
+    headers        Json?
+    requestBody    Json?
+    createdAt      DateTime @default(now())
+    name           String
+    rateLimit      Int?
+    responseSchema Json?
+    updatedAt      DateTime @updatedAt
+    api            Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
+    @@unique([apiId, path, method])
+}
+
+model ApiAnalytics {
+    id              String   @id @default(uuid())
+    apiId           String   @unique
+    totalCalls      Int      @default(0)
+    errorRate       Float    @default(0.0)
+    responseTimeAvg Float    @default(0.0)
+    failedCalls     Int      @default(0)
+    lastUpdated     DateTime @updatedAt
+    successCalls    Int      @default(0)
+    api             Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
+    @@index([apiId])
+}
+
+model ApiCallLog {
+    id           String   @id @default(uuid())
+    apiId        String
+    timestamp    DateTime @default(now())
+    statusCode   Int
+    responseTime Float
+    endpoint     String?
+    consumerId   String?
+    country      String?
+    userAgent    String?
+    ipAddress    String?
+    errorMessage String?
+    api          Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
+    @@index([apiId])
+    @@index([timestamp])
+    @@index([consumerId])
+    @@index([country])
+    @@index([endpoint])
+}
+
+model RateLimitLog {
+    id        String   @id @default(uuid())
+    apiKeyId  String
+    timestamp DateTime @default(now())
+    count     Int      @default(1)
+    ip        String?
+    endpoint  String?
+    apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+    @@index([apiKeyId, timestamp])
+}
+
+model ApiKey {
+    id            String         @id @default(uuid())
+    apiId         String
+    userId        String
+    key           String         @unique
+    createdAt     DateTime       @default(now())
+    expiresAt     DateTime?
+    rateLimit     Int            @default(1000)
+    isActive      Boolean        @default(true)
+    lastUsed      DateTime?
+    name          String?
+    api           Api            @relation(fields: [apiId], references: [id], onDelete: Cascade)
+    user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+    rateLimitLogs RateLimitLog[]
+
+    @@index([apiId, userId])
+}
+
+model WebhookDelivery {
+    id        String   @id @default(uuid())
+    webhookId String
+    event     String
+    status    String
+    payload   String
+    error     String?
+    createdAt DateTime @default(now())
+    webhook   Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+    @@index([webhookId])
+    @@index([status])
+}
+
+model Webhook {
+    id            String            @id @default(uuid())
+    name          String
+    url           String
+    secret        String?
+    userId        String
+    apiId         String
+    events        String[]
+    isActive      Boolean           @default(true)
+    createdAt     DateTime          @default(now())
+    lastTriggered DateTime?
+    lastStatus    Int?
+    failCount     Int               @default(0)
+    api           Api               @relation(fields: [apiId], references: [id], onDelete: Cascade)
+    user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+    deliveries    WebhookDelivery[]
+
+    @@index([apiId, isActive])
+}
+
+model Notification {
+    id        String           @id @default(uuid())
+    userId    String
+    type      NotificationType
+    title     String
+    message   String
+    isRead    Boolean          @default(false)
+    data      Json?
+    createdAt DateTime         @default(now())
+    user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId, isRead])
+    @@index([createdAt])
+}
+
+model PurchasedAPI {
+    id        String   @id @default(uuid())
+    userId    String
+    apiId     String
+    createdAt DateTime @default(now())
+    api       Api      @relation(fields: [apiId], references: [id], onDelete: Cascade)
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([userId, apiId])
+}
+
+model Transaction {
+    id                String    @id @default(uuid())
+    buyerId           String
+    sellerId          String
+    apiId             String
+    amount            Float
+    createdAt         DateTime  @default(now())
+    status            String    @default("completed")
+    completedAt       DateTime?
+    failureReason     String?
+    paymentId         String
+    platformFee       Float
+    razorpayOrderId   String?
+    razorpayPaymentId String?
+    sellerReceives    Float
+    tds               Float
+    transferError     String?
+    transferId        String?
+    transferStatus    String?
+    api               Api       @relation(fields: [apiId], references: [id])
+    buyer             User      @relation("buyerTransaction", fields: [buyerId], references: [id])
+    seller            User      @relation("sellerTransaction", fields: [sellerId], references: [id])
+
+    @@index([buyerId, apiId])
+    @@index([sellerId])
+}
+
+model Review {
+    id        String   @id @default(uuid())
+    userId    String
+    apiId     String
+    rating    Int
+    comment   String?
+    createdAt DateTime @default(now())
+    authorId  String?
+    api       Api      @relation(fields: [apiId], references: [id])
+    author    User?    @relation("receivedReviews", fields: [authorId], references: [id])
+    user      User     @relation(fields: [userId], references: [id])
+
+    @@unique([userId, apiId])
+}
+
+enum PricingModel {
+    FREE
+    PAID
+}
+
+enum NotificationType {
+    API_PURCHASED
+    PURCHASE_CONFIRMED
+    API_UPDATED
+    NEW_REVIEW
+    RATE_LIMIT_REACHED
+    PAYMENT_RECEIVED
+    SYSTEM
+}
