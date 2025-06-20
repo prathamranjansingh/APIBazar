@@ -1,5 +1,5 @@
 {
-  "name": "APIBazar",
+  "name": "apibazar",
   "private": true,
   "scripts": {
     "build": "turbo run build",

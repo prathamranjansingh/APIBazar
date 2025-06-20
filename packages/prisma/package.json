@@ -1,5 +1,5 @@
 {
-  "name": "@APIBazar/prisma",
+  "name": "@apibazar/prisma",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -13,6 +13,7 @@
   "dependencies": {
     "@prisma/adapter-neon": "^6.10.0",
     "@prisma/client": "^6.10.0",
-    "prisma": "^6.10.0"
+    "prisma": "^6.10.0",
+    "ws": "^8.18.2"
   }
 }

@@ -1,5 +1,6 @@
 generator client {
-    provider = "prisma-client-js"
+    provider        = "prisma-client-js"
+    previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -8,15 +9,21 @@ datasource db {
 }
 
 model User {
-    id                   String         @id @default(uuid())
-    auth0Id              String         @unique
-    email                String         @unique
-    name                 String?
-    picture              String?
-    createdAt            DateTime       @default(now())
-    updatedAt            DateTime       @updatedAt
-    onboardingStatus     String?
-    razorpayAccountId    String?
+    id            String    @id @default(uuid())
+    email         String    @unique
+    emailVerified DateTime?
+    name          String?
+    image         String?
+
+    accounts             Account[]
+    //data of the password
+    passwordHash         String?
+    invalidLoginAttempts Int       @default(0)
+    lockedAt             DateTime?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
     listedAPIs           Api[]
     apiKeys              ApiKey[]
     notifications        Notification[]
@@ -27,6 +34,38 @@ model User {
     transactionsAsBuyer  Transaction[]  @relation("buyerTransaction")
     transactionsAsSeller Transaction[]  @relation("sellerTransaction")
     webhooks             Webhook[]
+    Session              Session[]
+}
+
+model Account {
+    id                       String  @id @default(cuid())
+    userId                   String
+    type                     String
+    provider                 String
+    providerAccountId        String
+    refresh_token            String? @db.Text
+    refresh_token_expires_in Int?
+    access_token             String? @db.Text
+    expires_at               Int?
+    token_type               String?
+    scope                    String?
+    id_token                 String? @db.Text
+    session_state            String?
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@unique([provider, providerAccountId])
+    @@index([userId])
+}
+
+model Session {
+    id           String   @id @default(cuid())
+    sessionToken String   @unique
+    userId       String
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
 }
 
 model Profile {
