@@ -1,4 +1,5 @@
-import { prisma } from "@apibazar/prisma";
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { sendEmail } from "@apibazar/email";
 import { LoginLink } from "@apibazar/email/templates/login-link";
@@ -144,6 +145,7 @@ export const authOptions: NextAuthOptions = {
       ) {
         console.log(
           `New user ${user.email} created,  triggering welcome workflow...`
+          //CAN SEND A WELCOME EMAIL
         );
       }
     },
