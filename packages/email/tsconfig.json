@@ -1,5 +1,5 @@
 {
-  "extends": "../typescript-config/base.json",
+  "extends": "@repo/typescript-config/base.json",
   "include": [
     "src/**/*"
 , "test-email.ts"  ],
@@ -12,6 +12,7 @@
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
     "jsxImportSource": "react",
-    "strict": true
+    "strict": true,
+    
   }
 }

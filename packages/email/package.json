@@ -2,7 +2,7 @@
   "name": "@apibazar/email",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "./src/index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "email dev --dir ./src/templates -p 3333"
@@ -29,5 +29,27 @@
     "@types/react-dom": "^19.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "require": "./src/index.ts"
+    },
+    "./templates/*": {
+      "import": "./src/templates/*.tsx",
+      "require": "./src/templates/*.tsx"
+    },
+    "./resend": {
+      "import": "./src/resend/index.ts",
+      "require": "./src/resend/index.ts"
+    },
+    "./resend/*": {
+      "import": "./src/resend/*.ts",
+      "require": "./src/resend/*.ts"
+    },
+    "./send-via-nodemailer": {
+      "import": "./src/send-via-nodemailer.ts",
+      "require": "./src/send-via-nodemailer.ts"
+    }
   }
 }

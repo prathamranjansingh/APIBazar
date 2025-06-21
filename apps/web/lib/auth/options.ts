@@ -1,6 +1,5 @@
 import { prisma } from "@apibazar/prisma";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-
 import { sendEmail } from "@apibazar/email";
 import { LoginLink } from "@apibazar/email/templates/login-link";
 
