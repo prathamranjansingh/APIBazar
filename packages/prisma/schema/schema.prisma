@@ -8,13 +8,21 @@ datasource db {
     url      = env("DATABASE_URL")
 }
 
-model User {
-    id            String    @id @default(uuid())
-    email         String    @unique
-    emailVerified DateTime?
-    name          String?
-    image         String?
+model VerificationToken {
+    identifier String
+    token      String   @unique
+    expires    DateTime
 
+    @@unique([identifier, token])
+}
+
+model User {
+    id                   String    @id @default(uuid())
+    email                String    @unique
+    emailVerified        DateTime?
+    name                 String?
+    image                String?
+    isMachine            Boolean   @default(false)
     accounts             Account[]
     //data of the password
     passwordHash         String?
@@ -23,6 +31,8 @@ model User {
 
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
+
+    tokens Token[]
 
     listedAPIs           Api[]
     apiKeys              ApiKey[]
@@ -35,6 +45,21 @@ model User {
     transactionsAsSeller Transaction[]  @relation("sellerTransaction")
     webhooks             Webhook[]
     Session              Session[]
+}
+
+model Token {
+    id         String    @id @default(cuid())
+    name       String
+    hashedKey  String    @unique
+    partialKey String
+    expires    DateTime?
+    lastUsed   DateTime?
+    createdAt  DateTime  @default(now())
+    updatedAt  DateTime  @updatedAt
+    user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId     String
+
+    @@index([userId])
 }
 
 model Account {

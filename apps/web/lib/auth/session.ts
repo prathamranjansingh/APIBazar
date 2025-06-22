@@ -1,4 +1,7 @@
-import { DubApiError, handleAndReturnErrorResponse } from "@/lib/api/errors";
+import {
+  ApiBazarApiError,
+  handleAndReturnErrorResponse,
+} from "@/lib/api/errors";
 import { ratelimit } from "@/lib/upstash";
 import { prisma } from "@apibazar/prisma";
 import { getSearchParams } from "@apibazar/utils";
@@ -34,7 +37,7 @@ export const withSession = (handler: WithSessionHandler) =>
         const authorizationHeader = req.headers.get("Authorization");
         if (authorizationHeader) {
           if (!authorizationHeader.includes("Bearer ")) {
-            throw new DubApiError({
+            throw new ApiBazarApiError({
               code: "bad_request",
               message:
                 "Misconfigured authorization header. Did you forget to add 'Bearer '? Learn more: https://d.to/auth",
@@ -60,7 +63,7 @@ export const withSession = (handler: WithSessionHandler) =>
             },
           });
           if (!user) {
-            throw new DubApiError({
+            throw new ApiBazarApiError({
               code: "unauthorized",
               message: "Unauthorized: Invalid API key.",
             });
@@ -105,7 +108,7 @@ export const withSession = (handler: WithSessionHandler) =>
         } else {
           session = await getSession();
           if (!session?.user.id) {
-            throw new DubApiError({
+            throw new ApiBazarApiError({
               code: "unauthorized",
               message: "Unauthorized: Login required.",
             });
