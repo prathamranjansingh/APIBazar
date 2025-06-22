@@ -15,6 +15,7 @@ export async function sendEmail(opts: ResendEmailOptions) {
   }
 
   const smtpReady = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT);
+  console.log("SMTP ready:", smtpReady);
 
   if (smtpReady) {
     const { email, subject, text, react } = opts;
