@@ -58,7 +58,7 @@ export const authOptions: NextAuthOptions = {
 
     CredentialsProvider({
       id: "credentials",
-      name: "Dub.co",
+      name: "Apibazar",
       type: "credentials",
       credentials: {
         email: { type: "email" },
