@@ -15,6 +15,6 @@ export default defineConfig((options: Options) => ({
   },
   dts: true,
   minify: true,
-  external: ["react"],
+  external: ["tailwindcss"],
   ...options,
 }));

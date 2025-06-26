@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Button from "@apibazar/ui";
 
 const messages: Record<string, string> = {
   "invalid-credentials": "Incorrect e-mail or password.",
@@ -18,7 +19,6 @@ export default function LoginPage() {
   const [pwd, setPwd] = useState("");
   const [magicEmail, setMagicEmail] = useState("");
   const [busy, setBusy] = useState(false);
-
   const params = useSearchParams();
   const router = useRouter();
   const error = params.get("error");

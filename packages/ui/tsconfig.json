@@ -1,11 +1,15 @@
 {
-  "extends": "@repo/typescript-config/react-library.json",
-  "include": ["."],
+   "extends": "@repo/typescript-config/react-library.json",
+  "include": ["src", "components", "lib"],
   "exclude": ["dist", "build", "node_modules"],
   "compilerOptions": {
+    "outDir": "dist",
     "baseUrl": ".",
+    "declaration": true,
+    "declarationMap": true,
+    "jsx": "react-jsx",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["src/*"]
     }
   }
 }
