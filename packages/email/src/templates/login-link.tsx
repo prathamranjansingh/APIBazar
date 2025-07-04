@@ -26,7 +26,7 @@ export function LoginLink({
       <Head />
       <Preview>Your ApiBazar login link</Preview>
       <Tailwind>
-        <Body className="bg-white font-sans">
+        <Body className="bg-[#0F0F0F] font-sans">
           <Container className="mx-auto my-10 max-w-[600px] rounded border border-gray-200 px-10 py-8">
             <Section className="mt-6">
               <Img

@@ -44,7 +44,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto p-6">
+    <main className="max-w-md mx-auto p-6 text-white bg-[#171717] border-subtle rounded-md border px-4 py-10 sm:px-10">
       {/* OAuth Providers */}
       <div className="space-y-3 mb-8">
         <button

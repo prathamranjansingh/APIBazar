@@ -1,13 +1,17 @@
 import containerQueries from "@tailwindcss/container-queries";
 import forms from "@tailwindcss/forms";
 import typography from "@tailwindcss/typography";
-import scrollbarHide from "tailwind-scrollbar-hide";
 
 import type { Config } from "tailwindcss";
 import radix from "tailwindcss-radix";
 
 const config: Config = {
-  content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
+  content: [
+    "./src/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+
   darkMode: "class",
   future: {
     hoverOnlyWhenSupported: true,
@@ -205,12 +209,12 @@ const config: Config = {
           800: "#846358",
           900: "#43302b",
         },
+        subtle: "#262626",
 
         // Light/dark mode colors
 
         "bg-emphasis": "rgb(var(--bg-emphasis, 229 229 229) / <alpha-value>)",
         "bg-default": "rgb(var(--bg-default, 255 255 255) / <alpha-value>)",
-        "bg-subtle": "rgb(var(--bg-subtle, 245 245 245) / <alpha-value>)",
         "bg-muted": "rgb(var(--bg-muted, 250 250 250) / <alpha-value>)",
         "bg-inverted": "rgb(var(--bg-inverted, 23 23 23) / <alpha-value>)",
 
@@ -223,8 +227,6 @@ const config: Config = {
           "rgb(var(--border-emphasis, 163 163 163) / <alpha-value>)",
         "border-default":
           "rgb(var(--border-default, 212 212 212) / <alpha-value>)",
-        "border-subtle":
-          "rgb(var(--border-subtle, 229 229 229) / <alpha-value>)",
         "border-muted": "rgb(var(--border-muted, 245 245 245) / <alpha-value>)",
 
         "content-inverted":
@@ -253,7 +255,6 @@ const config: Config = {
   plugins: [
     forms,
     typography,
-    scrollbarHide,
     radix,
     // TODO: Remove the container queries plugin when we upgrade to Tailwind v4
     containerQueries,
