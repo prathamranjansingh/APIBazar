@@ -9,10 +9,10 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "@apibazar/tailwind-config": "*",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "prettier": "^3.5.3",
-    "tailwindcss": "^4.1.10",
     "turbo": "^2.5.4",
     "typescript": "5.8.2"
   },
@@ -25,7 +25,6 @@
     "packages/*"
   ],
   "dependencies": {
-    "@tailwindcss/postcss": "^4.1.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.523.0",
