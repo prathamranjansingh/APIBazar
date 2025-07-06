@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Button from "@apibazar/ui";
-
+import { Button } from "@apibazar/ui";
+import { Input } from "@apibazar/ui";
+import { GoogleLogo } from "@apibazar/ui";
+import { GithubLogo } from "@apibazar/ui";
 const messages: Record<string, string> = {
   "invalid-credentials": "Incorrect e-mail or password.",
   "no-credentials": "Please enter e-mail and password.",
@@ -44,21 +46,22 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="max-w-md mx-auto p-6 text-white bg-[#171717] border-subtle rounded-md border px-4 py-10 sm:px-10">
-      {/* OAuth Providers */}
+    <main className="max-w-md  p-6 text-white bg-[#171717] border border-subtle rounded-md mx-2 px-4 py-10 sm:px-10">
       <div className="space-y-3 mb-8">
-        <button
+        <Button
           onClick={() => signIn("google")}
-          className="w-full border rounded py-2 font-medium hover:bg-gray-900"
+          className="w-full border bg-white hover:bg-gray-200 border-white py-2 font-medium"
         >
+          <GoogleLogo></GoogleLogo>
           Continue with Google
-        </button>
-        <button
+        </Button>
+        <Button
+          className="w-full border bg-white  hover:bg-gray-200 border-[white py-2 font-medium"
           onClick={() => signIn("github")}
-          className="w-full border rounded py-2 font-medium hover:bg-gray-50"
         >
+          <GithubLogo></GithubLogo>
           Continue with GitHub
-        </button>
+        </Button>
       </div>
 
       {/* Divider */}
@@ -70,49 +73,46 @@ export default function LoginPage() {
 
       {/* Credentials Form */}
       <form onSubmit={handleCredentials} className="space-y-4">
-        <input
+        <Input
           required
           type="email"
           placeholder="E-mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full border rounded px-4 py-2"
         />
-        <input
+        <Input
           required
           type="password"
           placeholder="Password"
           value={pwd}
           onChange={(e) => setPwd(e.target.value)}
-          className="w-full border rounded px-4 py-2"
         />
-        <button
+        <Button
           type="submit"
           disabled={busy}
-          className="w-full text-white rounded py-2 font-medium disabled:opacity-50"
+          className="w-full text-white py-2 font-medium disabled:opacity-50"
         >
           {busy ? "Signing in..." : "Sign in"}
-        </button>
+        </Button>
       </form>
 
       {/* Magic Link */}
       <p className="mt-6 text-sm font-medium">Prefer a one-time link?</p>
       <form onSubmit={handleMagic} className="flex gap-2 mt-2">
-        <input
+        <Input
           required
           type="email"
           placeholder="Work e-mail"
           value={magicEmail}
           onChange={(e) => setMagicEmail(e.target.value)}
-          className="flex-grow border rounded px-4 py-2"
         />
-        <button
+        <Button
           type="submit"
           disabled={busy}
           className="bg-blue-600 text-white rounded px-4 font-medium disabled:opacity-50"
         >
           Send
-        </button>
+        </Button>
       </form>
 
       {/* Error Message */}

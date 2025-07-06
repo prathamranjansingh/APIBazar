@@ -1,18 +1,11 @@
+import sharedConfig from "@apibazar/tailwind-config/tailwind.config";
 import type { Config } from "tailwindcss";
-import colors from "tailwindcss/colors";
 
-const config: Config = {
-  content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
-
-  darkMode: "class",
-  future: {
-    hoverOnlyWhenSupported: true,
-  },
+const config = {
+  presets: [sharedConfig],
   theme: {
     extend: {
       colors: {
-        subtle: "#262626",
-        default: "var(--apibazar-bg, #171717)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -68,7 +61,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
 };
 
 export default config;
