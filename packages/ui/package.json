@@ -38,7 +38,7 @@
     "tw-animate-css": "^1.3.4"
   },
   "peerDependencies": {
-    "next": "14.2.0-canary.47",
+    "next": "15.3.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

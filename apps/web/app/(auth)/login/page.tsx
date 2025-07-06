@@ -10,10 +10,9 @@ export default async function LoginPage() {
 
   return (
     <div className="flex text-white min-h-screen items-center justify-center bg-[#0F0F0F] px-4">
-      {/* Your brand / logo etc. */}
-      <div className="w-full max-w-sm">
-        <h1 className="mb-6 text-center text-2xl font-semibold">
-          Sign in to {process.env.NEXT_PUBLIC_APP_NAME}
+      <div>
+        <h1 className="mb-6 font-sans text-center text-2xl font-semibold">
+          Welcome back
         </h1>
         <LoginForm />
       </div>
