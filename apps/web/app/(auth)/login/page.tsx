@@ -9,7 +9,7 @@ export default async function LoginPage() {
   if (session) redirect("/"); // or "/dashboard"
 
   return (
-    <div className="flex text-white min-h-screen items-center justify-center bg-[#0F0F0F] px-4">
+    <div className="flex text-white min-h-screen items-center justify-center px-4">
       <div>
         <h1 className="mb-6 font-sans text-center text-2xl font-semibold">
           Welcome back
