@@ -193,7 +193,7 @@ export default function StepForm() {
 
       {/* ─────── Link to Sign In ─────── */}
       <div className="mt-6 text-center text-sm cursor-pointer text-gray-300 hover:underline">
-        <Link href="/signup">Already have an account?</Link>
+        <Link href="/login">Already have an account?</Link>
       </div>
     </div>
   );

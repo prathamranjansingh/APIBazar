@@ -3,11 +3,10 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Button } from "@apibazar/ui";
-import { Input } from "@apibazar/ui";
-import { GoogleLogo } from "@apibazar/ui";
-import { GithubLogo } from "@apibazar/ui";
+import { Button, Input, GoogleLogo, GithubLogo } from "@apibazar/ui";
 import Link from "next/link";
+import { toast } from "sonner";
+
 const messages: Record<string, string> = {
   "invalid-credentials": "Incorrect e-mail or password.",
   "no-credentials": "Please enter e-mail and password.",
@@ -29,21 +28,48 @@ export default function LoginPage() {
   async function handleCredentials(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const res = await signIn("credentials", {
-      email,
-      password: pwd,
-      redirect: false,
-      callbackUrl: "/",
-    });
-    setBusy(false);
-    if (res?.error) router.push(`/login?error=${res.error}`);
-    else if (res?.url) router.push(res.url);
+    try {
+      const res = await signIn("credentials", {
+        email,
+        password: pwd,
+        redirect: false,
+        callbackUrl: "/",
+      });
+
+      if (res?.error) {
+        router.push(`/login?error=${res.error}`);
+        toast.error(messages[res.error] ?? "Login failed");
+      } else if (res?.url) {
+        toast.success("Signed in successfully!");
+        router.push(res.url);
+      }
+    } catch (err) {
+      toast.error("Unexpected error during sign-in.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleMagic(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await signIn("email", { email: magicEmail, callbackUrl: "/" });
+    try {
+      const res = await signIn("email", {
+        email: magicEmail,
+        callbackUrl: "/",
+        redirect: false,
+      });
+
+      if (res?.error) {
+        toast.error("Failed to send magic link.");
+      } else {
+        toast.success("Magic link sent! Check your inbox.");
+      }
+    } catch {
+      toast.error("Something went wrong while sending the magic link.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -54,14 +80,14 @@ export default function LoginPage() {
             onClick={() => signIn("google")}
             className="w-full border bg-white hover:bg-gray-200 border-white py-2 font-medium"
           >
-            <GoogleLogo></GoogleLogo>
+            <GoogleLogo />
             Sign in with Google
           </Button>
           <Button
-            className="w-full border bg-white  hover:bg-gray-200 border-[white py-2 font-medium"
             onClick={() => signIn("github")}
+            className="w-full border bg-white hover:bg-gray-200 border-white py-2 font-medium"
           >
-            <GithubLogo></GithubLogo>
+            <GithubLogo />
             Sign in with GitHub
           </Button>
         </div>
@@ -116,14 +142,8 @@ export default function LoginPage() {
             Send
           </Button>
         </form>
-
-        {/* Error Message */}
-        {error && (
-          <p className="mt-4 text-red-600 text-sm">
-            {messages[error] ?? "Something went wrong."}
-          </p>
-        )}
       </div>
+
       <div className="mt-6 text-center text-sm cursor-pointer">
         <Link href="/signup"> Don't have an account? </Link>
       </div>
