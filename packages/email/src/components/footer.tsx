@@ -16,19 +16,11 @@ export function Footer({
         <Text className="text-[12px] leading-6 text-neutral-500">
           We send out product update emails once a month – no spam, no nonsense.
           Don't want to get these emails?{" "}
-          <Link
-            className="text-neutral-700 underline"
-            href="https://app.dub.co/account/settings"
-          >
-            Unsubscribe here.
-          </Link>
         </Text>
         <Text className="text-[12px] text-neutral-500">
-          Dub Technologies, Inc.
+          APIBazar Technologies, Inc.
           <br />
-          2261 Market Street STE 5906
-          <br />
-          San Francisco, CA 941114
+          Bangalore, India 560036
         </Text>
       </Tailwind>
     );
@@ -56,11 +48,9 @@ export function Footer({
         </Text>
       )}
       <Text className="text-[12px] text-neutral-500">
-        Dub Technologies, Inc.
+        ApiBazar Technologies, Inc.
         <br />
-        2261 Market Street STE 5906
-        <br />
-        San Francisco, CA 941114
+        Bangalore, India 560036
       </Text>
     </Tailwind>
   );

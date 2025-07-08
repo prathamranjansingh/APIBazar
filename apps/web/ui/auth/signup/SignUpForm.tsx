@@ -15,7 +15,7 @@ type ActionResult<T> =
   | { validationErrors: unknown }
   | { serverError: string };
 
-export default function StepForm() {
+export default function SignUpForm() {
   const [step, setStep] = useState<"email" | "verify">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -192,7 +192,7 @@ export default function StepForm() {
       </div>
 
       {/* ─────── Link to Sign In ─────── */}
-      <div className="mt-6 text-center text-sm cursor-pointer text-gray-300 hover:underline">
+      <div className="mt-6 text-center text-sm cursor-pointer text-gray-300 hover:text-white">
         <Link href="/login">Already have an account?</Link>
       </div>
     </div>
