@@ -3,6 +3,7 @@ import type { Config } from "tailwindcss";
 
 const config = {
   presets: [sharedConfig],
+  darkMode: ["class"],
   theme: {
     extend: {
       colors: {

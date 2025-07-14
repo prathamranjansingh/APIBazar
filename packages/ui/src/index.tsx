@@ -10,7 +10,8 @@ export * from "./components/ui/tooltip";
 export * from "./components/ui/skeleton";
 export * from "./components/ui/separator";
 export * from "./components/ui/sheet";
-
+export * from "./components/ui/breadcrumb";
+export * from "./components/ui/avatar";
 //icons
 export * from "./icons/GoogleLogo";
 export * from "./icons/GithubLogo";
