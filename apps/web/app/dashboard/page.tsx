@@ -12,7 +12,7 @@ import {
 import { cn } from "@apibazar/ui"
 export default function Page() {
   return (
-    <div className="mx-auto flex w-full flex-1 flex-col overflow-hidden  md:flex-row h-screen">
+    <div className="mx-auto flex w-full flex-1 flex-col overflow-auto  md:flex-row h-screen">
       <SidebarDemo />
       <div className="flex flex-col flex-1 p-4">
         <header className="flex h-16 items-center gap-2 px-4">
