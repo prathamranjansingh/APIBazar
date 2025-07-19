@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { Sidebar, SidebarBody, SidebarLink } from "./sidebar/sidebar";
+import { Sidebar, SidebarBody, SidebarDropdown, SidebarLink } from "./sidebar/sidebar";
 import {
   IconArrowLeft,
   IconBrandTabler,
@@ -41,6 +41,41 @@ export function SidebarDemo() {
       ),
     },
   ];
+
+const accountDropdownLink = {
+  label: "Account",
+  icon: <img
+  src="https://media.licdn.com/dms/image/v2/D4E03AQHKfxUJW4wXaQ/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1722264770993?e=1758153600&v=beta&t=Bf7mp1mpuN72vDlnCjCGG8suYXhD1foR_Eli3q6rtxg"
+  className="h-7 w-7 shrink-0 rounded-full"
+  width={50}
+  height={50}
+  alt="Avatar"
+/>,
+  dropdownItems: [
+    {
+      label: "Profile",
+      href: "/profile",
+    },
+    {
+      label: "Billing",
+      href: "/billing",
+    },
+    {
+      label: "Team",
+      href: "/team",
+    },
+    {
+      label: "Subscription",
+      href: "/subscription",
+    },
+    {
+      label: "OpenAI",
+      href: "https://openai.com",
+      external: true,
+    },
+  ],
+};
+
   const [open, setOpen] = useState(false);
   return (
       <Sidebar open={open} setOpen={setOpen}>
@@ -54,21 +89,7 @@ export function SidebarDemo() {
             </div>
           </div>
           <div>
-            <SidebarLink
-              link={{
-                label: "Pratham Singh",
-                href: "#",
-                icon: (
-                  <img
-                    src="https://media.licdn.com/dms/image/v2/D4E03AQHKfxUJW4wXaQ/profile-displayphoto-shrink_100_100/profile-displayphoto-shrink_100_100/0/1722264770993?e=1758153600&v=beta&t=Bf7mp1mpuN72vDlnCjCGG8suYXhD1foR_Eli3q6rtxg"
-                    className="h-7 w-7 shrink-0 rounded-full"
-                    width={50}
-                    height={50}
-                    alt="Avatar"
-                  />
-                ),
-              }}
-            />
+          <SidebarDropdown link={accountDropdownLink} />;
           </div>
         </SidebarBody>
       </Sidebar>

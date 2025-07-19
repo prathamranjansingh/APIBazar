@@ -1,13 +1,34 @@
 "use client";
-import { cn } from "@apibazar/ui";
+import { Button, cn } from "@apibazar/ui";
 import React, { useState, createContext, useContext } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { IconMenu2, IconX } from "@tabler/icons-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@apibazar/ui"
+
 
 interface Links {
   label: string;
   href: string;
   icon: React.JSX.Element | React.ReactNode;
+}
+
+
+
+
+interface SidebarDropdownProps {
+  link: {
+    label: string
+    icon: React.ReactNode
+    dropdownItems: { href: string; label: string; external?: boolean }[]
+  }
+  className?: string
 }
 
 interface SidebarContextProps {
@@ -186,3 +207,47 @@ export const SidebarLink = ({
     </a>
   );
 };
+
+export const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ link, className }) => {
+  const { open, animate } = useSidebar()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            "flex hover:nov items-center justify-start gap-2  group/sidebar py-2",
+            className,
+          )}
+        >
+          {link.icon}
+          <motion.span
+            animate={{
+              display: animate ? (open ? "inline-block" : "none") : "inline-block",
+              opacity: animate ? (open ? 1 : 0) : 1,
+            }}
+            className="text-white text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre"
+          >
+            {link.label}
+          </motion.span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="z-[550]" side="top" align="start">
+        <DropdownMenuLabel>{link.label}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {link.dropdownItems.map((item) => (
+          <DropdownMenuItem key={item.href} asChild>
+            <a
+              href={item.href}
+              target={item.external ? "_blank" : undefined}
+              rel={item.external ? "noopener noreferrer" : undefined}
+              className="w-full cursor-pointer"
+            >
+              {item.label}
+            </a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
