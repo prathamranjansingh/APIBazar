@@ -131,6 +131,7 @@ export const MobileSidebar = ({
   ...props
 }: React.ComponentProps<"div">) => {
   const { open, setOpen } = useSidebar();
+
   return (
     <>
       <div
@@ -145,28 +146,35 @@ export const MobileSidebar = ({
             onClick={() => setOpen(!open)}
           />
         </div>
+
         <AnimatePresence>
           {open && (
+            // ✅ Backdrop
             <motion.div
-              initial={{ x: "-100%", opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: "-100%", opacity: 0 }}
-              transition={{
-                duration: 0.3,
-                ease: "easeInOut",
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="fixed inset-0 z-[90] bg-black/20 backdrop-blur-sm"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setOpen(false);
+                }
               }}
-              className={cn(
-                "fixed h-full w-full inset-0 bg-[#0F0F0F] p-10 z-[100] flex flex-col justify-between",
-                className
-              )}
             >
-              <div
-                className="absolute right-10 top-10 z-50 text-white"
-                onClick={() => setOpen(!open)}
+              <motion.div
+                initial={{ x: "-100%", opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: "-100%", opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className={cn(
+                  "h-full w-[45%] bg-[#0F0F0F] p-10 z-[100] flex flex-col justify-between",
+                  className
+                )}
               >
-                <IconX className="text-white"/>
-              </div>
-              {children}
+                
+                {children}
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -174,6 +182,7 @@ export const MobileSidebar = ({
     </>
   );
 };
+
 
 export const SidebarLink = ({
   link,
@@ -216,7 +225,7 @@ export const SidebarDropdown: React.FC<SidebarDropdownProps> = ({ link, classNam
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            "flex hover:nov items-center justify-start gap-2  group/sidebar py-2",
+            "flex items-center justify-start gap-2 group/sidebar py-2",
             className,
           )}
         >
