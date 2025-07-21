@@ -15,6 +15,6 @@ export const ratelimit = (
     redis: redis,
     limiter: Ratelimit.slidingWindow(requests, seconds),
     analytics: true,
-    prefix: "dub",
+    prefix: "apibazar",
   });
 };
