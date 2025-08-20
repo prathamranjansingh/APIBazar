@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { generateErrorMessage } from "zod-error";
 import { ZodOpenApiResponseObject } from "zod-openapi";
-import { PlanProps } from "../types";
-import { capitalize } from "@apibazar/utils";
+import { capitalize, logger } from "@apibazar/utils";
 export const ErrorCode = z.enum([
   "bad_request",
   "not_found",
@@ -121,7 +120,7 @@ export function fromZodError(error: ZodError): ErrorResponse {
 }
 
 export function handleApiError(error: any): ErrorResponse & { status: number } {
-  console.error("API error occurred", error.message);
+  logger.error("API error occurred", error.message);
 
   // Zod errors
   if (error instanceof ZodError) {
@@ -143,20 +142,7 @@ export function handleApiError(error: any): ErrorResponse & { status: number } {
     };
   }
 
-  // Prisma record not found error
-  if (error.code === "P2025") {
-    return {
-      error: {
-        code: "not_found",
-        message:
-          error?.meta?.cause ||
-          error.message ||
-          "The requested resource was not found.",
-        doc_url: `${docErrorUrl}#not-found`,
-      },
-      status: 404,
-    };
-  }
+ 
 
   // Fallback
   // Unhandled errors are not user-facing, so we don't expose the actual error
@@ -164,8 +150,7 @@ export function handleApiError(error: any): ErrorResponse & { status: number } {
     error: {
       code: "internal_server_error",
       message:
-        "An internal server error occurred. Please contact our support if the problem persists.",
-      doc_url: `${docErrorUrl}#internal-server-error`,
+        "An internal server error occurred. Please contact our support if the problem persists."
     },
     status: 500,
   };
@@ -225,18 +210,4 @@ export const errorSchemaFactory = (
   };
 };
 
-export const exceededLimitError = ({
-  plan,
-  limit,
-  type,
-}: {
-  plan: PlanProps;
-  limit: number;
-  type: "clicks" | "links" | "AI" | "domains" | "tags" | "users" | "folders";
-}) => {
-  return `You've reached your ${
-    type === "links" || type === "AI" ? "monthly" : ""
-  } limit of ${limit} ${
-    limit === 1 ? type.slice(0, -1) : type
-  } on the ${capitalize(plan)} plan. Please upgrade to add more ${type}.`;
-};
+

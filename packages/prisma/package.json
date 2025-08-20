@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "generate": "npx prisma generate --schema=./schema",
+    "generate": "npx prisma generate --schema=./schema/schema.prisma",
+    "db:push": "npx prisma db push --schema=./schema/schema.prisma",
+    "db:migrate": "npx prisma migrate dev --schema=./schema/schema.prisma",
+    "db:studio": "npx prisma studio --schema=./schema/schema.prisma",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
